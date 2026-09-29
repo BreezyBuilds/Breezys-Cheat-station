@@ -11,19 +11,20 @@ import java.io.File
 
 /** Handles the Storage Access Framework grants and turns them into [FileStore]s. */
 class StorageManager(private val ctx: Context) {
-    private val prefs = ctx.getSharedPreferences("azahar_cm", Context.MODE_PRIVATE)
+    private val prefs = ctx.getSharedPreferences("breezy_cheat_station_storage", Context.MODE_PRIVATE)
+    private val legacyPrefs = ctx.getSharedPreferences("azahar_cm", Context.MODE_PRIVATE)
     private val resolver = ctx.contentResolver
 
     var rootUri: Uri?
-        get() = prefs.getString("root_uri", null)?.let(Uri::parse)
+        get() = (prefs.getString("root_uri", null) ?: legacyPrefs.getString("root_uri", null))?.let(Uri::parse)
         private set(v) = prefs.edit { putString("root_uri", v?.toString()) }
     /** Optional override when the cheats folder is not <root>/cheats. */
     var cheatsUri: Uri?
-        get() = prefs.getString("cheats_uri", null)?.let(Uri::parse)
+        get() = (prefs.getString("cheats_uri", null) ?: legacyPrefs.getString("cheats_uri", null))?.let(Uri::parse)
         private set(v) = prefs.edit { putString("cheats_uri", v?.toString()) }
     /** Optional folder that holds .cia/.3ds/.cxi files. */
     var gamesUri: Uri?
-        get() = prefs.getString("games_uri", null)?.let(Uri::parse)
+        get() = (prefs.getString("games_uri", null) ?: legacyPrefs.getString("games_uri", null))?.let(Uri::parse)
         private set(v) = prefs.edit { putString("games_uri", v?.toString()) }
 
     enum class Slot { ROOT, CHEATS, GAMES }
@@ -46,7 +47,7 @@ class StorageManager(private val ctx: Context) {
         return null
     }
 
-    /** Use a folder even though it does not look like an Azahar folder (grant was already persisted by [accept]). */
+    /** Use a folder even though it does not match the usual 3DS emulator markers. */
     fun forceRoot(uri: Uri) { rootUri = uri }
 
     fun clear(slot: Slot) {
@@ -60,7 +61,7 @@ class StorageManager(private val ctx: Context) {
 
     fun rootDoc(): DocumentFile? = rootUri?.takeIf { hasPermission(it) }?.let { DocumentFile.fromTreeUri(ctx, it) }?.takeIf { it.exists() }
 
-    /** Folders that make a directory look like an Azahar user directory. */
+    /** Common markers found in 3DS emulator data/user folders. */
     private val markers = listOf("sdmc", "nand", "config", "cheats", "sysdata", "log", "states", "shaders")
 
     /** (valid, message) */
@@ -70,11 +71,11 @@ class StorageManager(private val ctx: Context) {
         val names = doc.listFiles().mapNotNull { it.name?.lowercase() }
         val hits = markers.count { it in names }
         return if (hits >= 1) true to "OK" else false to
-            "That doesn't look like an Azahar data folder (no sdmc, nand, config or cheats folder inside). Pick the folder that contains them."
+            "That doesn't look like a 3DS emulator data folder. Pick the emulator's user/data folder (for example one containing sdmc, nand, config, cheats or similar data)."
     }
 
     /**
-     * Auto-discovery, limited by what Android permits: (1) reuse an existing persisted grant that looks like Azahar,
+     * Auto-discovery, limited by what Android permits: reuse an existing persisted grant that looks like a 3DS emulator data folder,
      * (2) otherwise return a folder-picker hint pointing at the most likely location.
      */
     fun autoDetectExistingGrant(): Uri? {
@@ -90,9 +91,9 @@ class StorageManager(private val ctx: Context) {
         return null
     }
 
-    /** Where to open the system folder picker so the user starts near Azahar's data. */
+    /** Where to open the system folder picker near common 3DS emulator locations. */
     fun pickerHint(): Uri? {
-        val candidates = listOf("azahar-emu", "Azahar", "azahar", "citra-emu", "Android/data/io.github.azahar_emu.azahar/files")
+        val candidates = listOf("citra-emu", "Citra", "3ds", "emulator", "Android/data")
         val base = File("/storage/emulated/0")
         val found = candidates.firstOrNull { try { File(base, it).exists() } catch (_: Exception) { false } }
         val rel = found ?: candidates.last()
@@ -103,7 +104,7 @@ class StorageManager(private val ctx: Context) {
 
     fun rootStore(): FileStore? = rootDoc()?.let { DocumentFileStore(ctx, it) }
 
-    /** Store rooted at the cheats folder (created inside a validated Azahar folder when missing). */
+    /** Store rooted at the cheats folder (created inside a validated emulator data folder when missing). */
     fun cheatsStore(): FileStore? {
         cheatsUri?.takeIf { hasPermission(it) }?.let { u ->
             DocumentFile.fromTreeUri(ctx, u)?.takeIf { it.exists() && it.isDirectory }?.let { return DocumentFileStore(ctx, it) }
@@ -115,7 +116,7 @@ class StorageManager(private val ctx: Context) {
             existing != null && existing.isDirectory -> existing
             existing != null -> return null
             else -> {
-                AppLog.i("Storage", "No cheats folder found, creating one inside the Azahar folder")
+                AppLog.i("Storage", "No cheats folder found, creating one inside the emulator data folder")
                 root.createDirectory("cheats")
             }
         } ?: return null

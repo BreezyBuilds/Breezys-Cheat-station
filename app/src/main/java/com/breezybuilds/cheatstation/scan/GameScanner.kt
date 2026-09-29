@@ -10,10 +10,10 @@ import com.breezybuilds.cheatstation.util.TitleId
 data class ScanResult(val games: List<Game>, val warnings: List<String>, val error: String? = null)
 
 /**
- * Finds games in the Azahar data folder:
+ * Finds games in the selected 3DS emulator data folder:
  *  1. Installed titles: sdmc/Nintendo 3DS/<id0>/<id1>/title/<high>/<low>/content (Title ID from the folder names,
  *     version from the TMD, name/region from the game's icon data when readable).
- *  2. CIA / 3DS / CXI files found in the Azahar folder (top level) and in an optional "games folder".
+ *  2. CIA / 3DS / CXI files found in the emulator data folder (top level) and in an optional "games folder".
  * Call from a background thread.
  */
 class GameScanner(private val ctx: Context, private val storage: StorageManager, private val ids: TitleIdResolver) {
@@ -26,7 +26,7 @@ class GameScanner(private val ctx: Context, private val storage: StorageManager,
     private val skipDirs = setOf("sdmc", "nand", "cheats", "shaders", "cache", "log", "states", "sysdata", "load", "dump", "screenshots", "config")
 
     fun scan(progress: (String) -> Unit = {}): ScanResult {
-        val root = storage.rootDoc() ?: return ScanResult(emptyList(), emptyList(), "No Azahar folder is selected (or access was lost).")
+        val root = storage.rootDoc() ?: return ScanResult(emptyList(), emptyList(), "No 3DS emulator data folder is selected (or access was lost).")
         val warnings = mutableListOf<String>()
         val installed = LinkedHashMap<String, Installed>()
         val updates = HashMap<String, Int>()

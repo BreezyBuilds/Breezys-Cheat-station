@@ -6,13 +6,13 @@ import com.breezybuilds.cheatstation.model.CodeLine
 import com.breezybuilds.cheatstation.util.TitleId
 
 /**
- * Parser/writer for Gateway-style cheat text files as used by Citra/Azahar and Luma/Atmosphere-style tools:
+ * Parser/writer for Gateway-style cheat text files as used by common 3DS emulator and Luma/Atmosphere-style tools:
  *
  *     [Infinite Health]
  *     0A1B2C3D 00000001
  *     # optional comment
  *
- * A cheat that is switched on in Azahar is written with a leading asterisk: `[*Infinite Health]`.
+ * A cheat that is switched on in a supported emulator is written with a leading asterisk: `[*Infinite Health]`.
  * The parser also accepts `*[Name]` and `{Name}` headers. Change [ENABLED_MARK] / [header] to alter the write style.
  */
 object CheatParser {

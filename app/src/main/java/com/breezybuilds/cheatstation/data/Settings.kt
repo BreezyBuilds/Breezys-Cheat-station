@@ -5,7 +5,7 @@ import androidx.core.content.edit
 import com.breezybuilds.cheatstation.provider.CheatSourceConfig
 
 class Settings(ctx: Context) {
-    private val p = ctx.getSharedPreferences("azahar_cm_settings", Context.MODE_PRIVATE)
+    private val p = ctx.getSharedPreferences("breezy_cheat_station_settings", Context.MODE_PRIVATE)
 
     var autoUpdate: Boolean
         get() = p.getBoolean("auto_update", true)
@@ -34,5 +34,5 @@ class Settings(ctx: Context) {
         putString("src_path", c.basePath.trim()); putString("src_pattern", c.fileNamePattern.trim()); putString("src_token", c.token?.trim())
     }
 
-    fun resetSource() = p.edit { remove("src_owner"); remove("src_repo"); remove("src_branch"); remove("src_path"); remove("src_pattern") }
+    fun resetSource() = p.edit { remove("src_owner"); remove("src_repo"); remove("src_branch"); remove("src_path"); remove("src_pattern"); remove("src_token") }
 }

@@ -19,7 +19,7 @@ import java.io.File
 /**
  * End-to-end instrumentation test: exercises [CheatInstaller] and [BackupManager] on top of a
  * real [DocumentFileStore] writing to actual on-device storage, the same code path used when the
- * app installs cheats into a user-picked Azahar folder.
+ * app installs cheats into a user-picked 3DS emulator folder.
  */
 @RunWith(AndroidJUnit4::class)
 class CheatInstallerDeviceTest {

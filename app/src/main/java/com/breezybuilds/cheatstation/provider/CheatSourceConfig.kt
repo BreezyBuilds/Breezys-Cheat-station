@@ -43,15 +43,12 @@ data class CheatSourceConfig(
     }
 
     companion object {
-        /**
-         * Default public source: a community repository of Gateway/CTRPF-style cheat files, one "<TITLEID>.txt"
-         * per game inside "cheats/". Change it in Settings > Cheat source if this repository moves or you prefer another.
-         */
+        /** FlagBrew's current Sharkive 3DS database. */
         val DEFAULT = CheatSourceConfig(
-            owner = "jvhellraiser",
-            repo = "CTRPF-AR-CHEAT-CODES",
-            branch = "HEAD",
-            basePath = "cheats",
+            owner = "FlagBrew",
+            repo = "Sharkive",
+            branch = "master",
+            basePath = "3ds",
             fileNamePattern = "{TITLEID}.txt",
         )
     }

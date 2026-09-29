@@ -22,6 +22,7 @@ import com.breezybuilds.cheatstation.app
 import com.breezybuilds.cheatstation.cheats.BackupManager
 import com.breezybuilds.cheatstation.data.DatabaseUpdater
 import com.breezybuilds.cheatstation.provider.CheatSourceConfig
+import com.breezybuilds.cheatstation.provider.RecommendedCheatSources
 import com.breezybuilds.cheatstation.storage.StorageManager
 import com.breezybuilds.cheatstation.util.AppLog
 import kotlinx.coroutines.Dispatchers
@@ -48,6 +49,9 @@ class SettingsActivity : AppCompatActivity() {
         root.addView(ScrollView(ctx).apply { addView(content) }, Ui.lp(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
         render()
+        when (intent.getStringExtra("open_section")) {
+            "source" -> window.decorView.post { chooseRecommendedSource() }
+        }
     }
 
     private fun section(title: String) {
@@ -63,28 +67,30 @@ class SettingsActivity : AppCompatActivity() {
         val st = app.storage
         val src = app.settings.source()
 
-        section("AZAHAR DIRECTORY")
-        line("Data folder: " + st.describe(st.rootUri))
+        section("3DS EMULATOR STORAGE")
+        line("Emulator data folder: " + st.describe(st.rootUri))
         line("Cheats folder: " + if (st.cheatsUri != null) st.describe(st.cheatsUri) else "automatic (<data folder>/cheats)", true)
-        line("Games folder (optional): " + st.describe(st.gamesUri), true)
-        btn("Change Azahar folder", true) { pickRoot.launch(st.pickerHint()) }
+        line("Games folder: " + st.describe(st.gamesUri), true)
+        btn("Change emulator data folder", true) { pickRoot.launch(st.pickerHint()) }
         btn("Select a different cheats folder…") { pickCheats.launch(st.rootUri) }
         btn("Select a games folder (CIA/3DS/CXI)…") { pickGames.launch(null) }
         if (st.cheatsUri != null) btn("Use automatic cheats folder") { st.clear(StorageManager.Slot.CHEATS); render() }
         if (st.gamesUri != null) btn("Forget games folder") { st.clear(StorageManager.Slot.GAMES); render() }
 
         section("CHEAT SOURCE")
-        line(src.displayName)
+        line("Current source: ${src.displayName}", false)
         line("Branch ${src.branch}, folder \"${src.basePath}\", files ${src.fileNamePattern}", true)
-        btn("Edit cheat source…") { editSource() }
-        btn("Reset to default source") { app.settings.resetSource(); render(); note(Ui.Kind.OK, "Cheat source reset to the default.") }
+        line("Recommended sources are built in. FlagBrew / Sharkive is selected by default.", true)
+        btn("Browse recommended sources…", true) { chooseRecommendedSource() }
+        btn("Edit custom GitHub source…") { editSource() }
+        btn("Use default Sharkive source") { app.settings.resetSource(); render(); note(Ui.Kind.OK, "Sharkive is now the active cheat source.") }
 
         section("CHEAT DATABASE")
         line("Cached cheat data: ${app.cache.cheatDataSize() / 1024} KB", true)
         btn("Refresh cheat database now", true) { refreshNow() }
         btn("Clear cached cheat data") {
             MaterialAlertDialogBuilder(this).setTitle("Clear cached cheat data?")
-                .setMessage("Downloaded cheat lists are removed from this app. Cheats already installed in Azahar are not touched.")
+                .setMessage("Downloaded cheat lists are removed from this app. Cheats already installed in the emulator are not touched.")
                 .setPositiveButton("Clear") { _, _ -> val n = app.cache.clearCheatData(); render(); note(Ui.Kind.OK, "Cleared ${n / 1024} KB of cached data.") }
                 .setNegativeButton("Cancel", null).show()
         }
@@ -108,7 +114,7 @@ class SettingsActivity : AppCompatActivity() {
 
         section("ABOUT")
         line("Breezy's Cheat Station ${BuildConfigVersion.name(this)}")
-        line("A companion utility that finds your Azahar games and installs cheat files for them. It is not part of, and is not endorsed by, the Azahar project or Nintendo. Cheat codes come from third-party sources; use them at your own risk.", true)
+        line("A companion utility that finds your 3DS games and installs compatible cheat files for them. It works alongside supported 3DS emulators rather than belonging to any one emulator project. Cheat codes come from third-party sources; use them at your own risk.", true)
     }
 
     private fun note(kind: Ui.Kind, msg: String) = Ui.show(banner, kind, msg)
@@ -119,6 +125,26 @@ class SettingsActivity : AppCompatActivity() {
         MaterialAlertDialogBuilder(this).setTitle("Folder problem").setMessage(err)
             .setPositiveButton("Use anyway") { _, _ -> if (slot == StorageManager.Slot.ROOT) app.storage.forceRoot(uri); render() }
             .setNegativeButton("Cancel", null).show()
+    }
+
+    private fun chooseRecommendedSource() {
+        val sources = RecommendedCheatSources.all
+        val current = app.settings.source().id
+        var selected = sources.indexOfFirst { it.config.id == current }.coerceAtLeast(0)
+        val labels = sources.mapIndexed { index, it ->
+            val marker = if (it.config.id == current) "✓ " else ""
+            marker + it.name + "\n" + it.description
+        }.toTypedArray()
+        val dlg = MaterialAlertDialogBuilder(this)
+            .setTitle("Recommended cheat sources")
+            .setSingleChoiceItems(labels, selected) { _, which -> selected = which }
+            .setPositiveButton("Use selected") { _, _ ->
+                app.settings.saveSource(sources[selected].config)
+                render()
+                note(Ui.Kind.OK, "Using ${sources[selected].name}. Refresh the cheat database to download from it.")
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun editSource() {
@@ -161,7 +187,7 @@ class SettingsActivity : AppCompatActivity() {
 
     // ---- backups --------------------------------------------------------------------------------
     private fun manageBackups() {
-        val bm = app.backups() ?: run { note(Ui.Kind.ERROR, "The cheats folder is not available. Select your Azahar folder first."); return }
+        val bm = app.backups() ?: run { note(Ui.Kind.ERROR, "The cheats folder is not available. Select your emulator data folder first."); return }
         lifecycleScope.launch {
             val names = withContext(Dispatchers.IO) { bm.list() }
             if (names.isEmpty()) { note(Ui.Kind.INFO, "There are no backups yet."); return@launch }

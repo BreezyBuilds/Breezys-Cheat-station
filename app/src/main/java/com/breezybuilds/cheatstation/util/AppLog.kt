@@ -32,7 +32,7 @@ object AppLog {
             if (buf.size >= MAX) buf.removeFirst()
             buf.addLast(line)
         }
-        try { Log.println(when (level) { 'E' -> Log.ERROR; 'W' -> Log.WARN; 'D' -> Log.DEBUG; else -> Log.INFO }, "AzaharCM", line) } catch (_: Throwable) {}
+        try { Log.println(when (level) { 'E' -> Log.ERROR; 'W' -> Log.WARN; 'D' -> Log.DEBUG; else -> Log.INFO }, "BreezyCheatStation", line) } catch (_: Throwable) {}
     }
 
     fun dump(): String = synchronized(buf) { buf.joinToString("\n") }

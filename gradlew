@@ -1,5 +1,5 @@
 #!/bin/sh
-# Gradle launcher for AzaharCheatManager.
+# Gradle launcher for BreezyCheatStation.
 # - If gradle/wrapper/gradle-wrapper.jar exists, behaves like the standard wrapper.
 # - Otherwise downloads the Gradle distribution once (needs curl + unzip) and runs it.
 APP_HOME=$(cd "$(dirname "$0")" && pwd)
@@ -10,7 +10,7 @@ if [ -f "$JAR" ]; then
   exec java -classpath "$JAR" org.gradle.wrapper.GradleWrapperMain "$@"
 fi
 
-CACHE="${GRADLE_BOOTSTRAP_DIR:-$HOME/.cache/azahar-gradle}"
+CACHE="${GRADLE_BOOTSTRAP_DIR:-$HOME/.cache/breezy-cheat-station-gradle}"
 DIST="$CACHE/gradle-$GRADLE_VERSION"
 if [ ! -x "$DIST/bin/gradle" ]; then
   command -v curl  >/dev/null 2>&1 || { echo "ERROR: curl is required (Termux: pkg install curl)"; exit 1; }

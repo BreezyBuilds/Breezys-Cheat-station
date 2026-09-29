@@ -1,12 +1,12 @@
 # Breezy's Cheat Station
 
-An easy way to add cheats to your Azahar (3DS emulator) games.
+An easy way to add cheats to your 3DS emulator games.
 
-Breezy's Cheat Station looks at the games you already have in Azahar, finds matching cheat codes
+Breezy's Cheat Station looks at the games you already have in the emulator, finds matching cheat codes
 online, and installs the ones you pick — automatically backing up your existing cheats first, so
 you can always undo a change.
 
-This is an independent app. It isn't made by, endorsed by, or officially connected to Azahar,
+This is an independent app. It isn't made by, endorsed by, or officially connected to any emulator project,
 Nintendo, or the emulator scene in general — it just works alongside them.
 
 ## What it does
@@ -22,12 +22,12 @@ Nintendo, or the emulator scene in general — it just works alongside them.
 ## Getting started
 
 1. **Install the app** (see "Getting the app" below if you don't have it yet).
-2. Open it and tap **Select Azahar folder**. Pick the folder on your device that has Azahar's data
+2. Open it and tap **Select 3DS emulator data folder**. Pick the folder on your device that has the emulator's data
    in it — the one containing `sdmc`, `nand`, and `cheats` inside it.
 3. The app will scan and show you your games.
 4. Tap a game to see what cheats are available for it.
 5. Select the ones you want and tap **Install Selected**.
-6. Launch the game in Azahar — your cheats will be active.
+6. Launch the game in your emulator — your cheats will be active.
 
 That's it. If a game doesn't have cheats available in the current source, you can try a different
 cheat source under **Settings → Cheat source**.
@@ -44,7 +44,7 @@ goes wrong, or you just want to go back:
 ## Common questions
 
 **A game isn't showing up.**
-Make sure you selected Azahar's actual data folder (the one with `sdmc`, `nand`, and `cheats`
+Make sure you selected the emulator's actual data folder (the one with `sdmc`, `nand`, and `cheats`
 inside). If your ROM files live somewhere else, you can also point the app at a separate "games"
 folder in Settings.
 
@@ -114,7 +114,7 @@ folder and opens the system installer.
 
 ### How it identifies games
 
-For installed titles, it reads the real NCCH/TMD headers under Azahar's title folder structure —
+For installed titles, it reads the real NCCH/TMD headers under the emulator's title folder structure —
 Title ID, version, and (from the SMDH) title/region — rather than trusting file or folder names.
 For loose `.cia`/`.3ds`/`.cci`/`.cxi` files, it parses the same header info from the file itself,
 falling back to guessing a Title ID from the filename only if the header can't be read.
@@ -146,3 +146,28 @@ restored. Backups are pruned to the 25 most recent per title.
 ## License
 
 See [LICENSE](LICENSE).
+
+
+## v1.1 UI improvements
+
+- Dashboard summary for games, cached cheats and installed cheats.
+- Clearer game cards showing region, version, Title ID and cheat status.
+- Cheat search on the game cheat screen.
+- Cheat rows now show a lightweight category inferred from the cheat name.
+- Existing automatic database refresh, caching, compatibility checks and backup/restore behaviour are unchanged.
+
+## v1.2 universal emulator + source improvements
+
+- Setup now asks for both a **3DS emulator data folder** and a **games folder** on first use.
+- Emulator wording is generic so the app can be used with supported 3DS emulators rather than being tied to one emulator brand.
+- **FlagBrew / Sharkive** is now the default cheat source.
+- **Settings → Recommended sources** provides several pre-loaded GitHub cheat repositories/forks that can be switched without manually entering repository details.
+- A custom GitHub source can still be entered manually.
+
+
+### v1.2.1 UI polish
+- Dashboard now shows game/cheat totals, storage folders, and the active cheat source.
+- Quick access to folder and cheat-source settings from the dashboard.
+- First-run setup has a clear welcome heading and explains the two required folders.
+- Recommended cheat sources show the active source and make the built-in list easier to browse.
+- User-facing terminology remains emulator-neutral and does not depend on a specific 3DS emulator.

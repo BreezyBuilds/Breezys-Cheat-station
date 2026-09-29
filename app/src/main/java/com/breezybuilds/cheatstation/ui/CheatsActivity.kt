@@ -5,9 +5,13 @@ import android.view.Menu
 import android.view.View
 import android.view.ViewGroup
 import android.widget.CheckBox
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import android.text.Editable
+import android.text.TextWatcher
+import android.text.InputType
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -29,7 +33,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** One line in the cheat list: what the source offers and/or what is already in Azahar's cheat file. */
+/** One line in the cheat list: what the source offers and/or what is already in the emulator's cheat file. */
 data class CheatRow(val key: String, val name: String, val remote: Cheat?, val installed: Cheat?) {
     val differs: Boolean get() = remote != null && installed != null && remote.normalizedCode != installed.normalizedCode
     val codeCount: Int get() = (remote ?: installed)?.codeLines?.size ?: 0
@@ -41,6 +45,7 @@ class CheatsActivity : AppCompatActivity() {
     private lateinit var compatBanner: TextView
     private lateinit var header: TextView
     private lateinit var sourceInfo: TextView
+    private lateinit var search: EditText
     private lateinit var progress: LinearProgressIndicator
     private lateinit var adapter: CheatAdapter
     private lateinit var buttons: List<View>
@@ -67,7 +72,7 @@ class CheatsActivity : AppCompatActivity() {
         toolbar.setOnMenuItemClickListener {
             when (it.itemId) {
                 1 -> loadCheats()
-                2 -> { selected.clear(); selected.addAll(rows.map { r -> r.key }); adapter.notifyDataSetChanged() }
+                2 -> { selected.addAll(visibleRows().map { r -> r.key }); adapter.notifyDataSetChanged() }
                 3 -> { selected.clear(); adapter.notifyDataSetChanged() }
             }
             true
@@ -80,12 +85,28 @@ class CheatsActivity : AppCompatActivity() {
         root.addView(header, Ui.lp())
         sourceInfo = Ui.tv(ctx, "", 12f, secondary = true).apply { setPadding(Ui.dp(ctx, 16), 0, Ui.dp(ctx, 16), Ui.dp(ctx, 6)) }
         root.addView(sourceInfo, Ui.lp())
+
+        search = EditText(ctx).apply {
+            hint = "Search cheats"
+            inputType = InputType.TYPE_CLASS_TEXT
+            setSingleLine()
+            setPadding(Ui.dp(ctx, 12), 0, Ui.dp(ctx, 12), 0)
+            addTextChangedListener(object : TextWatcher {
+                override fun afterTextChanged(s: Editable?) { adapter.notifyDataSetChanged() }
+                override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+                override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            })
+        }
+        root.addView(search, Ui.lp().apply {
+            setMargins(Ui.dp(ctx, 12), 0, Ui.dp(ctx, 12), Ui.dp(ctx, 6))
+        })
+
         compatBanner = Ui.banner(ctx)
         root.addView(compatBanner, Ui.lp())
         banner = Ui.banner(ctx)
         root.addView(banner, Ui.lp())
 
-        adapter = CheatAdapter({ rows }, selected, { key, on -> if (on) selected.add(key) else selected.remove(key) }, ::onEnableToggle)
+        adapter = CheatAdapter(::visibleRows, selected, { key, on -> if (on) selected.add(key) else selected.remove(key) }, ::onEnableToggle)
         val list = RecyclerView(ctx).apply { layoutManager = LinearLayoutManager(ctx); this.adapter = this@CheatsActivity.adapter }
         root.addView(list, Ui.lp(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
 
@@ -147,6 +168,12 @@ class CheatsActivity : AppCompatActivity() {
         updateHeader()
     }
 
+    private fun visibleRows(): List<CheatRow> {
+        val q = search.text?.toString()?.trim().orEmpty()
+        if (q.isEmpty()) return rows
+        return rows.filter { it.name.contains(q, ignoreCase = true) }
+    }
+
     private fun loadCheats() {
         if (busy) return
         setBusy(true)
@@ -175,7 +202,7 @@ class CheatsActivity : AppCompatActivity() {
     private fun reloadInstalled() {
         lifecycleScope.launch {
             val r = withContext(Dispatchers.IO) {
-                val inst = app.installer() ?: return@withContext null to "The cheats folder is not available. Check Settings > Azahar folder."
+                val inst = app.installer() ?: return@withContext null to "The cheats folder is not available. Check Settings > emulator data folder."
                 try { inst.readExisting(game.titleId) to null } catch (e: Exception) { AppLog.e("Cheats", "Read existing failed", e); null to "Could not read the existing cheat file: ${e.message}" }
             }
             installedFile = r.first
@@ -187,7 +214,7 @@ class CheatsActivity : AppCompatActivity() {
     // ---- actions --------------------------------------------------------------------------------
     private fun installerOrError(): CheatInstaller? {
         val i = app.installer()
-        if (i == null) Ui.show(banner, Ui.Kind.ERROR, "The Azahar cheats folder is not available. Open Settings and select your Azahar folder (or a cheats folder) again.")
+        if (i == null) Ui.show(banner, Ui.Kind.ERROR, "The emulator cheats folder is not available. Open Settings and select your emulator data folder (or a cheats folder) again.")
         return i
     }
 
@@ -293,11 +320,18 @@ class CheatAdapter(
         h.check.text = r.name
         h.check.isChecked = r.key in selected
         h.check.setOnCheckedChangeListener { _, on -> onSelect(r.key, on) }
+        val category = when {
+            r.name.contains(Regex("money|coin|cash|credit", RegexOption.IGNORE_CASE)) -> "Currency"
+            r.name.contains(Regex("health|hp|life|damage|invincible", RegexOption.IGNORE_CASE)) -> "Gameplay"
+            r.name.contains(Regex("unlock|all|costume|weapon|item", RegexOption.IGNORE_CASE)) -> "Unlocks"
+            r.name.contains(Regex("speed|encounter|fps|quality|walk", RegexOption.IGNORE_CASE)) -> "Quality of Life"
+            else -> "Cheat"
+        }
         h.sub.text = when {
-            r.remote == null -> "Installed (not in the current source) • ${r.codeCount} code line(s)"
-            r.installed == null -> "Not installed • ${r.codeCount} code line(s)"
-            r.differs -> "Installed, but the code differs from the source • ${r.codeCount} code line(s)"
-            else -> "Installed • ${r.codeCount} code line(s)"
+            r.remote == null -> "$category • Installed (not in the current source) • ${r.codeCount} code line(s)"
+            r.installed == null -> "$category • Not installed • ${r.codeCount} code line(s)"
+            r.differs -> "$category • Installed, but the code differs from the source • ${r.codeCount} code line(s)"
+            else -> "$category • Installed • ${r.codeCount} code line(s)"
         }
         h.sw.setOnCheckedChangeListener(null)
         if (r.installed != null) {
