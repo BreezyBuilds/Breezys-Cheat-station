@@ -33,7 +33,8 @@ data class Cheat(
 /** A Gateway/Citra code line is two or more 8-digit hex words, e.g. "0A1B2C3D 00000001". */
 object CodeLine {
     private val CODE_RE = Regex("^[0-9A-Fa-f]{8}(\\s+[0-9A-Fa-f]{8})+$")
-    fun isCode(line: String) = CODE_RE.matches(line.trim())
+    private val PNACH_RE = Regex("^patch\\s*=.*$", RegexOption.IGNORE_CASE)
+    fun isCode(line: String) = CODE_RE.matches(line.trim()) || PNACH_RE.matches(line.trim())
 }
 
 data class CheatFile(

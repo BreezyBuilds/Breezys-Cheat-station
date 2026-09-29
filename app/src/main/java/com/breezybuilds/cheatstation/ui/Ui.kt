@@ -39,6 +39,17 @@ object Ui {
             isAllCaps = false
             setOnClickListener { onClick() }
         }
+    fun compactButton(ctx: Context, label: String, onClick: () -> Unit): MaterialButton =
+        button(ctx, label, true, onClick).apply {
+            minHeight = dp(ctx, 38)
+            minimumHeight = dp(ctx, 38)
+            minWidth = 0
+            textSize = 12f
+            setPadding(dp(ctx, 10), 0, dp(ctx, 10), 0)
+            insetTop = 0
+            insetBottom = 0
+        }
+
 
     fun banner(ctx: Context): TextView = TextView(ctx).apply {
         setPadding(dp(ctx, 14), dp(ctx, 10), dp(ctx, 14), dp(ctx, 10))

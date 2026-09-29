@@ -22,6 +22,8 @@ import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.progressindicator.LinearProgressIndicator
 import com.breezybuilds.cheatstation.app
 import com.breezybuilds.cheatstation.cheats.CheatInstaller
+import com.breezybuilds.cheatstation.cheats.PnachCheatInstaller
+import com.breezybuilds.cheatstation.cheats.PnachBackupManager
 import com.breezybuilds.cheatstation.cheats.Compatibility
 import com.breezybuilds.cheatstation.cheats.InstallResult
 import com.breezybuilds.cheatstation.data.CheatResult
@@ -41,6 +43,7 @@ data class CheatRow(val key: String, val name: String, val remote: Cheat?, val i
 
 class CheatsActivity : AppCompatActivity() {
     private lateinit var game: Game
+    private var isPs2 = false
     private lateinit var banner: TextView
     private lateinit var compatBanner: TextView
     private lateinit var header: TextView
@@ -61,11 +64,12 @@ class CheatsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         val ctx = this
         val tid = intent.getStringExtra("titleId") ?: run { finish(); return }
-        game = Game(intent.getStringExtra("title") ?: "Game", tid, intent.getStringExtra("region"), intent.getStringExtra("version"), null, false, "")
+        isPs2 = intent.getStringExtra("platform") == "ps2"
+        game = Game(intent.getStringExtra("title") ?: "Game", tid, intent.getStringExtra("region"), intent.getStringExtra("version"), null, false, if(isPs2) "PS2" else "3DS")
 
         val root = Ui.vbox(ctx)
         Ui.edgeToEdge(root)
-        val toolbar = MaterialToolbar(ctx).apply { title = "Cheats" }
+        val toolbar = MaterialToolbar(ctx).apply { title = if (isPs2) "PS2 Cheats" else "Cheats" }
         toolbar.menu.add(Menu.NONE, 1, 1, "Refresh cheats")
         toolbar.menu.add(Menu.NONE, 2, 2, "Select all")
         toolbar.menu.add(Menu.NONE, 3, 3, "Select none")
@@ -106,7 +110,7 @@ class CheatsActivity : AppCompatActivity() {
         banner = Ui.banner(ctx)
         root.addView(banner, Ui.lp())
 
-        adapter = CheatAdapter(::visibleRows, selected, { key, on -> if (on) selected.add(key) else selected.remove(key) }, ::onEnableToggle)
+        adapter = CheatAdapter(::visibleRows, selected, { key, on -> if (on) selected.add(key) else selected.remove(key) }, ::onEnableToggle, supportsEnableToggle = !isPs2)
         val list = RecyclerView(ctx).apply { layoutManager = LinearLayoutManager(ctx); this.adapter = this@CheatsActivity.adapter }
         root.addView(list, Ui.lp(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
 
@@ -121,7 +125,8 @@ class CheatsActivity : AppCompatActivity() {
 
         updateHeader()
         // Cached copy first so the screen is useful immediately (and offline), then fresh data.
-        app.repository.cached(tid)?.let { loaded = it; compat = Compatibility.check(game.version, it.file.version); refreshInfo() }
+        if (isPs2) app.ps2Repository.cached(tid)?.let { loaded = it; compat = null; refreshInfo() }
+        else app.repository.cached(tid)?.let { loaded = it; compat = Compatibility.check(game.version, it.file.version); refreshInfo() }
         reloadInstalled()
         loadCheats()
     }
@@ -145,7 +150,7 @@ class CheatsActivity : AppCompatActivity() {
 
     private fun refreshInfo() {
         val l = loaded
-        val src = app.settings.source().displayName
+        val src = if (isPs2) app.ps2Settings.source().name else app.settings.source().displayName
         sourceInfo.text = when {
             l == null -> "Source: $src"
             l.fromCache -> "Source: $src  •  CACHED data saved ${app.repository.formatTime(l.fetchedAt)} (not checked against the source just now)"
@@ -179,7 +184,7 @@ class CheatsActivity : AppCompatActivity() {
         setBusy(true)
         Ui.show(banner, Ui.Kind.INFO, "Checking for cheats…")
         lifecycleScope.launch {
-            val res = withContext(Dispatchers.IO) { app.repository.load(game.titleId) }
+            val res = withContext(Dispatchers.IO) { if (isPs2) app.ps2Repository.load(game.titleId) else app.repository.load(game.titleId) }
             setBusy(false)
             when (res) {
                 is CheatResult.Loaded -> {
@@ -202,8 +207,8 @@ class CheatsActivity : AppCompatActivity() {
     private fun reloadInstalled() {
         lifecycleScope.launch {
             val r = withContext(Dispatchers.IO) {
-                val inst = app.installer() ?: return@withContext null to "The cheats folder is not available. Check Settings > emulator data folder."
-                try { inst.readExisting(game.titleId) to null } catch (e: Exception) { AppLog.e("Cheats", "Read existing failed", e); null to "Could not read the existing cheat file: ${e.message}" }
+                if (isPs2) { val inst = app.ps2Installer() ?: return@withContext null to "The PS2 cheats folder is not available. Select the emulator data folder again."; try { inst.readExisting(game.titleId) to null } catch (e: Exception) { AppLog.e("PS2Cheats", "Read existing failed", e); null to "Could not read the existing PNACH file: ${e.message}" } }
+                else { val inst = app.installer() ?: return@withContext null to "The cheats folder is not available. Check Settings > emulator data folder."; try { inst.readExisting(game.titleId) to null } catch (e: Exception) { AppLog.e("Cheats", "Read existing failed", e); null to "Could not read the existing cheat file: ${e.message}" } }
             }
             installedFile = r.first
             if (r.second != null && banner.visibility != View.VISIBLE) Ui.show(banner, Ui.Kind.ERROR, r.second!!)
@@ -213,14 +218,23 @@ class CheatsActivity : AppCompatActivity() {
 
     // ---- actions --------------------------------------------------------------------------------
     private fun installerOrError(): CheatInstaller? {
+        if (isPs2) return null
         val i = app.installer()
-        if (i == null) Ui.show(banner, Ui.Kind.ERROR, "The emulator cheats folder is not available. Open Settings and select your emulator data folder (or a cheats folder) again.")
+        if (i == null) Ui.show(banner, Ui.Kind.ERROR, "The emulator cheats folder is not available. Open Settings and select your emulator data folder again.")
+        return i
+    }
+
+    private fun ps2InstallerOrError(): PnachCheatInstaller? {
+        if (!isPs2) return null
+        val i = app.ps2Installer()
+        if (i == null) Ui.show(banner, Ui.Kind.ERROR, "The PS2 cheats folder is not available. Select the emulator data folder again.")
         return i
     }
 
     private fun install(cheats: List<Cheat>) {
         if (busy) return
         if (cheats.isEmpty()) { Toast.makeText(this, "Select at least one cheat first.", Toast.LENGTH_SHORT).show(); return }
+        if (isPs2) { val installer = ps2InstallerOrError() ?: return; checkPs2Conflicts(installer, cheats); return }
         val installer = installerOrError() ?: return
         val c = compat
         if (c != null && c.status != Compatibility.Status.MATCH) {
@@ -230,6 +244,17 @@ class CheatsActivity : AppCompatActivity() {
                 .setNegativeButton("Cancel", null).show()
         } else checkConflicts(installer, cheats)
     }
+
+    private fun checkPs2Conflicts(installer: PnachCheatInstaller, cheats: List<Cheat>) {
+        setBusy(true); lifecycleScope.launch {
+            val preview=withContext(Dispatchers.IO){try{installer.preview(game.titleId,cheats)}catch(e:Exception){null}};setBusy(false)
+            if(preview==null){Ui.show(banner,Ui.Kind.ERROR,"Could not read the current PNACH file.");return@launch}
+            if(preview.conflicts.isEmpty()){runPs2Install(installer,cheats,emptySet());return@launch}
+            val names=preview.conflicts.joinToString("\n"){ "• ${it.name}" }
+            MaterialAlertDialogBuilder(this@CheatsActivity).setTitle("PS2 cheats already exist").setMessage("These cheats have different installed codes:\n\n$names\n\nReplace them? A backup is made first.").setPositiveButton("Replace"){_,_->runPs2Install(installer,cheats,preview.conflicts.map{it.key}.toSet())}.setNeutralButton("Keep existing"){_,_->runPs2Install(installer,cheats,emptySet())}.setNegativeButton("Cancel",null).show()
+        }
+    }
+    private fun runPs2Install(installer:PnachCheatInstaller,cheats:List<Cheat>,replace:Set<String>){setBusy(true);lifecycleScope.launch{val r=withContext(Dispatchers.IO){installer.install(game.titleId,cheats,replace)};setBusy(false);showResult(r);reloadInstalled()}}
 
     private fun checkConflicts(installer: CheatInstaller, cheats: List<Cheat>) {
         setBusy(true)
@@ -261,6 +286,7 @@ class CheatsActivity : AppCompatActivity() {
         if (busy) return
         val names = rows.filter { it.key in selected && it.installed != null }.map { it.name }
         if (names.isEmpty()) { Toast.makeText(this, "Select installed cheats to remove.", Toast.LENGTH_SHORT).show(); return }
+        if (isPs2) { val installer=ps2InstallerOrError() ?: return; MaterialAlertDialogBuilder(this).setTitle("Remove ${names.size} PS2 cheat(s)?").setMessage(names.joinToString("\n") { "• $it" } + "\n\nA backup of the PNACH file is made first.").setPositiveButton("Remove") { _, _ -> setBusy(true); lifecycleScope.launch { val r=withContext(Dispatchers.IO){installer.remove(game.titleId,names.toSet())}; setBusy(false); showResult(r); reloadInstalled() } }.setNegativeButton("Cancel",null).show(); return }
         val installer = installerOrError() ?: return
         MaterialAlertDialogBuilder(this).setTitle("Remove ${names.size} cheat(s)?")
             .setMessage(names.joinToString("\n") { "• $it" } + "\n\nA backup of the cheat file is made first.")
@@ -274,6 +300,7 @@ class CheatsActivity : AppCompatActivity() {
     }
 
     private fun onEnableToggle(row: CheatRow, on: Boolean) {
+        if (isPs2) { val installer=ps2InstallerOrError() ?: run { adapter.notifyDataSetChanged(); return }; lifecycleScope.launch { val r=withContext(Dispatchers.IO){installer.setEnabled(game.titleId,row.name,on)}; if(r is InstallResult.Failure)showResult(r); reloadInstalled() }; return }
         val installer = installerOrError() ?: run { adapter.notifyDataSetChanged(); return }
         lifecycleScope.launch {
             val r = withContext(Dispatchers.IO) { installer.setEnabled(game.titleId, row.name, on) }
@@ -294,6 +321,7 @@ class CheatAdapter(
     private val selected: Set<String>,
     private val onSelect: (String, Boolean) -> Unit,
     private val onEnable: (CheatRow, Boolean) -> Unit,
+    private val supportsEnableToggle: Boolean = true,
 ) : RecyclerView.Adapter<CheatAdapter.VH>() {
 
     class VH(val root: LinearLayout, val check: CheckBox, val sw: MaterialSwitch, val sub: TextView) : RecyclerView.ViewHolder(root)
@@ -334,7 +362,7 @@ class CheatAdapter(
             else -> "$category • Installed • ${r.codeCount} code line(s)"
         }
         h.sw.setOnCheckedChangeListener(null)
-        if (r.installed != null) {
+        if (r.installed != null && supportsEnableToggle) {
             h.sw.visibility = View.VISIBLE
             h.sw.isChecked = r.installed.enabled
             h.sw.setOnCheckedChangeListener { _, on -> onEnable(r, on) }

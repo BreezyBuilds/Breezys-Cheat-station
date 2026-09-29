@@ -171,3 +171,8 @@ See [LICENSE](LICENSE).
 - First-run setup has a clear welcome heading and explains the two required folders.
 - Recommended cheat sources show the active source and make the built-in list easier to browse.
 - User-facing terminology remains emulator-neutral and does not depend on a specific 3DS emulator.
+
+
+## v1.3.0 — PlayStation 2 / NetherSX2
+
+Breezy's Cheat Station now includes an initial PS2 provider. Select **PlayStation 2 / NetherSX2** from the main menu, choose the PS2 emulator data folder and a PS2 ISO folder, then the app identifies ISO serial + ELF CRC and searches community PCSX2-style PNACH sources. PNACH files are the cheat format used by PCSX2 and supported by NetherSX2.
