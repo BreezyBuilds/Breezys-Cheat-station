@@ -63,18 +63,20 @@ class MainActivity : AppCompatActivity() {
 
         val toolbar = MaterialToolbar(ctx).apply {
             title = "Breezy's Cheat Station"
-            subtitle = "3DS Cheat Manager"
+            subtitle = "3DS + PS2 Cheat Manager"
         }
         toolbar.menu.add(Menu.NONE, 1, 1, "Rescan games")
         toolbar.menu.add(Menu.NONE, 2, 2, "Add game by Title ID")
         toolbar.menu.add(Menu.NONE, 3, 3, "Refresh cheat database")
         toolbar.menu.add(Menu.NONE, 4, 4, "Settings")
+        toolbar.menu.add(Menu.NONE, 5, 5, "PlayStation 2 / NetherSX2")
         toolbar.setOnMenuItemClickListener {
             when (it.itemId) {
                 1 -> scan()
                 2 -> addManual()
                 3 -> refreshDatabase()
                 4 -> startActivity(Intent(ctx, SettingsActivity::class.java))
+                5 -> startActivity(Intent(ctx, Ps2Activity::class.java))
             }
             true
         }

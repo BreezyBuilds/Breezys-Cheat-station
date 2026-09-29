@@ -4,10 +4,18 @@ import android.app.Application
 import android.content.Context
 import com.breezybuilds.cheatstation.cheats.BackupManager
 import com.breezybuilds.cheatstation.cheats.CheatInstaller
+import com.breezybuilds.cheatstation.cheats.PnachCheatInstaller
+import com.breezybuilds.cheatstation.cheats.PnachBackupManager
 import com.breezybuilds.cheatstation.data.CacheStore
 import com.breezybuilds.cheatstation.data.CheatRepository
 import com.breezybuilds.cheatstation.data.Settings
 import com.breezybuilds.cheatstation.provider.GitHubCheatProvider
+import com.breezybuilds.cheatstation.provider.Ps2CheatProvider
+import com.breezybuilds.cheatstation.provider.Ps2CheatSources
+import com.breezybuilds.cheatstation.provider.Ps2Settings
+import com.breezybuilds.cheatstation.data.Ps2CheatRepository
+import com.breezybuilds.cheatstation.scan.Ps2GameScanner
+import com.breezybuilds.cheatstation.storage.Ps2Storage
 import com.breezybuilds.cheatstation.scan.GameScanner
 import com.breezybuilds.cheatstation.scan.TitleIdResolver
 import com.breezybuilds.cheatstation.storage.StorageManager
@@ -26,6 +34,14 @@ class App : Application() {
         private set
     lateinit var scanner: GameScanner
         private set
+    lateinit var ps2Storage: Ps2Storage
+        private set
+    lateinit var ps2Settings: Ps2Settings
+        private set
+    lateinit var ps2Scanner: Ps2GameScanner
+        private set
+    lateinit var ps2Repository: Ps2CheatRepository
+        private set
 
     override fun onCreate() {
         super.onCreate()
@@ -34,6 +50,10 @@ class App : Application() {
         cache = CacheStore(File(filesDir, "cache"))
         repository = CheatRepository(cache) { GitHubCheatProvider(settings.source()) }
         scanner = GameScanner(this, storage, TitleIdResolver(this))
+        ps2Storage = Ps2Storage(this)
+        ps2Settings = Ps2Settings(this)
+        ps2Scanner = Ps2GameScanner(this, ps2Storage)
+        ps2Repository = Ps2CheatRepository(cache) { val selected = ps2Settings.source(); listOf(Ps2CheatProvider(selected)) + Ps2CheatSources.all.filter { it.id != selected.id }.map { Ps2CheatProvider(it) } }
         AppLog.verbose = settings.debugLog
         AppLog.i("App", "Started v${BuildConfigVersion.name(this)}")
     }
@@ -45,6 +65,8 @@ class App : Application() {
     }
 
     fun backups(): BackupManager? = storage.cheatsStore()?.let { BackupManager(it) }
+
+    fun ps2Installer(): PnachCheatInstaller? = ps2Storage.cheatsStore()?.let { PnachCheatInstaller(it, PnachBackupManager(it)) }
 }
 
 val Context.app: App get() = applicationContext as App
