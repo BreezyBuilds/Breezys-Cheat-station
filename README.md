@@ -1,9 +1,8 @@
 # Azahar Cheat Manager
 
-An unofficial companion app for the [Azahar](https://azahar-emu.org/) 3DS emulator. It finds the
-games in your Azahar folder, downloads matching Gateway/Citra-style cheat files from a
-configurable GitHub source, and installs them into Azahar's `cheats` folder — with automatic,
-verified backups before every change.
+An unofficial companion app for the any 3DS emulator. It finds the
+games in your user folder, downloads matching Gateway/Citra-style cheat files from a
+configurable GitHub source, and installs them into your designated 3ds emulators `cheats` folder — with automatic, verified backups before every change.
 
 This app is not affiliated with, endorsed by, or supported by the Azahar or Citra projects, or by
 Nintendo. It only reads and writes plain-text cheat files in the format Azahar/Citra already use;
@@ -11,7 +10,7 @@ it does not modify Azahar itself, download ROMs, or provide any game content.
 
 ## What it does
 
-- **Finds your games.** Scans your Azahar `sdmc/Nintendo3DS` installed-titles folder and, optionally,
+- **Finds your games.** Scans your `sdmc/Nintendo3DS` installed-titles folder and, optionally,
   a folder of `.cia` / `.3ds` / `.cci` / `.cxi` files, reading each title's real header (Title ID,
   product code, region, version) rather than guessing from the file name.
 - **Fetches cheats.** Downloads Gateway-style cheat files for a game's Title ID from a GitHub
@@ -29,7 +28,7 @@ it does not modify Azahar itself, download ROMs, or provide any game content.
 ## Requirements
 
 - An Android device or emulator, Android 10 (API 29) or newer.
-- [Azahar](https://azahar-emu.org/) installed, with its data folder (the one containing `sdmc`,
+- Any 3ds emulator installed, with its data folder (the one containing `sdmc`,
   `nand`, and `cheats`) accessible to file pickers on your device.
 - To **build** the app: either GitHub Actions (no local setup at all) or a Linux/Termux
   environment with JDK 17 and the Android SDK command-line tools.
