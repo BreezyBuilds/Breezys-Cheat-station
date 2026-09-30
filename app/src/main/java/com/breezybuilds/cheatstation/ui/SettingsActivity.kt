@@ -1,5 +1,7 @@
 package com.breezybuilds.cheatstation.ui
 
+import com.breezybuilds.cheatstation.App
+
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -24,6 +26,7 @@ import com.breezybuilds.cheatstation.data.DatabaseUpdater
 import com.breezybuilds.cheatstation.provider.CheatSourceConfig
 import com.breezybuilds.cheatstation.provider.RecommendedCheatSources
 import com.breezybuilds.cheatstation.storage.StorageManager
+import com.breezybuilds.cheatstation.storage.DolphinStorage
 import com.breezybuilds.cheatstation.util.AppLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -39,6 +42,9 @@ class SettingsActivity : AppCompatActivity() {
     private val pickPs2Root = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { u -> if (u != null) acceptPs2Root(u) }
     private val pickPs2Games = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { u -> if (u != null) acceptPs2Games(u) }
     private val pickPs2Transfer = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { u -> if (u != null) acceptPs2Transfer(u) }
+    private val pickDolphinUser = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { u -> if (u != null) acceptDolphinUser(u) }
+    private val pickWiiGames = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { u -> if (u != null) acceptWiiGames(u) }
+    private val pickGameCubeGames = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { u -> if (u != null) acceptGameCubeGames(u) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -65,15 +71,121 @@ class SettingsActivity : AppCompatActivity() {
     private fun btn(label: String, filled: Boolean = false, onClick: () -> Unit) =
         content.addView(Ui.button(this, label, filled, onClick), Ui.lp().apply { topMargin = Ui.dp(this@SettingsActivity, 6) })
 
+    private fun chooseDolphinRepositories() {
+        val settings = (application as App).dolphinSettings
+        val sources = settings.allSources()
+        val selected = settings.sources().map { it.id }.toMutableSet()
+        val labels = sources.map { it.name }.toTypedArray()
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Dolphin cheat repositories")
+            .setMultiChoiceItems(labels, sources.map { it.id in selected }.toBooleanArray()) { _, which, checked ->
+                if (checked) selected += sources[which].id else selected -= sources[which].id
+            }
+            .setPositiveButton("Save") { _, _ ->
+                settings.saveSources(sources.filter { it.id in selected })
+                render()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun addDolphinRepository() {
+        val layout = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(Ui.dp(this@SettingsActivity, 24), Ui.dp(this@SettingsActivity, 8), Ui.dp(this@SettingsActivity, 24), 0)
+        }
+
+        val url = android.widget.EditText(this).apply {
+            hint = "GitHub repository URL"
+        }
+
+        val branch = android.widget.EditText(this).apply {
+            hint = "Branch (optional)"
+        }
+
+        val path = android.widget.EditText(this).apply {
+            hint = "Cheat folder (optional)"
+        }
+
+        layout.addView(url)
+        layout.addView(branch)
+        layout.addView(path)
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Add GitHub repository")
+            .setMessage("Add a GitHub repository containing Dolphin-compatible .ini cheat files.")
+            .setView(layout)
+            .setPositiveButton("Add") { _, _ ->
+                val repoUrl = url.text.toString().trim()
+                val repoBranch = branch.text.toString().trim().ifBlank { "master" }
+                val repoPath = path.text.toString().trim().trim('/')
+
+                val match = Regex("github\\.com/([^/]+)/([^/#]+)").find(repoUrl)
+
+                if (match == null) {
+                    note(Ui.Kind.ERROR, "Enter a valid GitHub repository URL.")
+                    return@setPositiveButton
+                }
+
+                val owner = match.groupValues[1]
+                val repo = match.groupValues[2].removeSuffix(".git")
+
+                val source = com.breezybuilds.cheatstation.provider.DolphinCheatSource(
+                    name = "$owner/$repo",
+                    description = "Custom GitHub Dolphin cheat repository.",
+                    owner = owner,
+                    repo = repo,
+                    branch = repoBranch,
+                    path = repoPath,
+                    custom = true
+                )
+
+                app.dolphinSettings.addCustomSource(source)
+                render()
+                note(Ui.Kind.OK, "Added ${source.name}.")
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+
+    private fun autoDetect3ds() {
+        val st = app.storage
+        val detected = com.breezybuilds.cheatstation.emulator.EmulatorDetector.detect3dsEmulator(this)
+
+        if (st.autoDetectExistingGrant() != null) {
+
+        val detectedFolder = st.autoDetect3dsFolder()
+        if (detectedFolder != null) {
+            Ui.show(banner, Ui.Kind.OK, "✓ Found 3DS emulator data: ${detectedFolder.path}")
+            render()
+            return
+        }
+            Ui.show(banner, Ui.Kind.OK, "✓ Reused your existing 3DS emulator folder access.")
+            render()
+            return
+        }
+
+        if (detected != null) {
+            Ui.show(banner, Ui.Kind.INFO, "${detected.name} detected. Select its data folder to give Breezy's Cheat Station access.")
+        } else {
+            Ui.show(banner, Ui.Kind.INFO, "No supported 3DS emulator was detected. Select your emulator data folder manually.")
+        }
+
+        pickRoot.launch(st.pickerHint())
+    }
+
     private fun render() {
         content.removeAllViews()
         val st = app.storage
         val src = app.settings.source()
 
         section("3DS EMULATOR STORAGE")
-        line("Emulator data folder: " + st.describe(st.rootUri))
+        line("Emulator data folder: " + st.describe3dsRoot())
         line("Cheats folder: " + if (st.cheatsUri != null) st.describe(st.cheatsUri) else "automatic (<data folder>/cheats)", true)
         line("Games folder: " + st.describe(st.gamesUri), true)
+        btn("🔍 Auto-detect 3DS emulator", true) { autoDetect3ds() }
         btn("Change emulator data folder", true) { pickRoot.launch(st.pickerHint()) }
         btn("Select a different cheats folder…") { pickCheats.launch(st.rootUri) }
         btn("Select a games folder (CIA/3DS/CXI)…") { pickGames.launch(null) }
@@ -92,6 +204,55 @@ class SettingsActivity : AppCompatActivity() {
         btn("Set emulator path manually") { ps2ManualPathDialog() }
         btn("Select PS2 games folder") { pickPs2Games.launch(null) }
         btn("Select transfer folder") { pickPs2Transfer.launch(null) }
+        section("DOLPHIN — WII / GAMECUBE")
+        val dolphin = app.dolphinStorage
+        val detectedDolphin = dolphin.detectDolphin()
+
+        line("Emulator: " + (detectedDolphin?.name ?: "Not detected"))
+
+        val accessText = when {
+            dolphin.directGameSettingsStore() != null -> "✓ Automatic access available"
+            dolphin.dolphinUserDoc() != null -> "✓ Folder access configured"
+            detectedDolphin != null -> "⚠ Android is restricting Dolphin's Android/data folder"
+            else -> "Not configured"
+        }
+
+        line("Cheat storage: $accessText", true)
+
+        if (detectedDolphin != null) {
+            line("Detected data folder: ${detectedDolphin.path}", true)
+        }
+
+        section("DOLPHIN CHEAT REPOSITORIES")
+        line("Enabled repositories: ${app.dolphinSettings.sources().size}", true)
+        btn("Choose cheat repositories…", true) { chooseDolphinRepositories() }
+        btn("Add GitHub repository…") { addDolphinRepository() }
+
+        btn("Configure Dolphin cheat storage", true) {
+            pickDolphinUser.launch(dolphin.dolphinUserUri)
+        }
+
+        if (dolphin.dolphinUserUri != null) {
+            btn("Forget Dolphin folder") {
+                dolphin.clearDolphinUser()
+                render()
+            }
+        }
+
+        line("Wii games folder: " + dolphin.describe(dolphin.wiiGamesUri), true)
+        btn("Select Wii games folder") { pickWiiGames.launch(dolphin.wiiGamesUri) }
+        if (dolphin.wiiGamesUri != null) btn("Forget Wii games folder") {
+            dolphin.clearWiiGames()
+            render()
+        }
+
+        line("GameCube games folder: " + dolphin.describe(dolphin.gameCubeGamesUri), true)
+        btn("Select GameCube games folder") { pickGameCubeGames.launch(dolphin.gameCubeGamesUri) }
+        if (dolphin.gameCubeGamesUri != null) btn("Forget GameCube games folder") {
+            dolphin.clearGameCubeGames()
+            render()
+        }
+
         section("CHEAT SOURCE")
         line("Current source: ${src.displayName}", false)
         line("Branch ${src.branch}, folder \"${src.basePath}\", files ${src.fileNamePattern}", true)
@@ -164,6 +325,24 @@ class SettingsActivity : AppCompatActivity() {
         MaterialAlertDialogBuilder(this).setTitle("Transfer folder problem").setMessage(err)
             .setPositiveButton("Choose again") { _, _ -> pickPs2Transfer.launch(null) }
             .setNegativeButton("Cancel", null).show()
+    }
+
+    private fun acceptDolphinUser(uri: Uri) {
+        val err = app.dolphinStorage.acceptDolphinUser(uri)
+        if (err == null) { render(); note(Ui.Kind.OK, "Dolphin data folder saved.") }
+        else MaterialAlertDialogBuilder(this).setTitle("Folder problem").setMessage(err).setPositiveButton("OK", null).show()
+    }
+
+    private fun acceptWiiGames(uri: Uri) {
+        val err = app.dolphinStorage.acceptWiiGames(uri)
+        if (err == null) { render(); note(Ui.Kind.OK, "Wii games folder saved.") }
+        else MaterialAlertDialogBuilder(this).setTitle("Folder problem").setMessage(err).setPositiveButton("OK", null).show()
+    }
+
+    private fun acceptGameCubeGames(uri: Uri) {
+        val err = app.dolphinStorage.acceptGameCubeGames(uri)
+        if (err == null) { render(); note(Ui.Kind.OK, "GameCube games folder saved.") }
+        else MaterialAlertDialogBuilder(this).setTitle("Folder problem").setMessage(err).setPositiveButton("OK", null).show()
     }
 
     private fun ps2ManualPathDialog() {

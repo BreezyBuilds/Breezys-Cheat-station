@@ -44,27 +44,6 @@ class Ps2PageFragment : Fragment() {
         val root = Ui.vbox(ctx)
         Ui.edgeToEdge(root)
 
-        val toolbar = MaterialToolbar(ctx).apply {
-            title = "Breezy's Cheat Station"
-            subtitle = "PlayStation 2 • Cheat Manager"
-
-            menu.add(0, 1, 1, "Rescan games")
-            menu.add(0, 2, 2, "Cheat source")
-            menu.add(0, 4, 4, "Settings")
-
-            setOnMenuItemClickListener {
-                when (it.itemId) {
-                    1 -> scan()
-                    2 -> sourceDialog()
-                    4 -> startActivity(
-                        Intent(ctx, SettingsActivity::class.java)
-                    )
-                }
-                true
-            }
-        }
-
-        root.addView(toolbar, Ui.lp())
 
         progress = LinearProgressIndicator(ctx).apply {
             isIndeterminate = true
@@ -77,7 +56,7 @@ class Ps2PageFragment : Fragment() {
 
         dashboard = Ui.tv(
             ctx,
-            "0 games  •  0 cheats available",
+            "0 games found",
             13f,
             secondary = true
         )
@@ -94,6 +73,7 @@ class Ps2PageFragment : Fragment() {
         )
 
         setupStatus = Ui.tv(ctx, "", 12f)
+        setupStatus.visibility = View.GONE
         root.addView(
             setupStatus,
             Ui.lp().apply {
@@ -135,6 +115,7 @@ class Ps2PageFragment : Fragment() {
             )
         }
 
+        search.visibility = View.GONE
         root.addView(
             search,
             Ui.lp().apply {
@@ -327,9 +308,18 @@ class Ps2PageFragment : Fragment() {
             }
 
             dashboard.text =
-                "$total games  •  $available cheats available"
+                "$total games found"
         }
     }
+
+    fun rescanGames() { scan() }
+
+    fun setSearchQuery(query: String) {
+        search.setText(query)
+        search.setSelection(search.text.length)
+    }
+
+    fun openCheatSource() { sourceDialog() }
 
     private fun scan() {
         if (busy) return
@@ -369,20 +359,15 @@ class Ps2PageFragment : Fragment() {
                 updateAdapter()
                 updateSetup()
 
-                Ui.show(
-                    banner,
-                    if (result.warnings.isEmpty()) {
-                        Ui.Kind.OK
-                    } else {
-                        Ui.Kind.WARN
-                    },
-                    "Found ${games.size} PS2 game(s)." +
-                        if (result.warnings.isNotEmpty()) {
-                            " ${result.warnings.first()}"
-                        } else {
-                            ""
-                        }
-                )
+                if (result.warnings.isNotEmpty()) {
+                    Ui.show(
+                        banner,
+                        Ui.Kind.WARN,
+                        result.warnings.first()
+                    )
+                } else {
+                    banner.visibility = View.GONE
+                }
             } catch (e: Exception) {
                 Ui.show(
                     banner,

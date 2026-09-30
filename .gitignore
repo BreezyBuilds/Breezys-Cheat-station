@@ -8,3 +8,20 @@ output/
 *.keystore
 
 .kotlin/
+
+# Local build/test artifacts
+*.apk
+*.zip
+*.bak
+*.before-*
+backups/
+*.error
+result.error
+No GameCube games found.
+No Wii games found.
+
+# Additional local backup/work files
+*.ui-backup
+*.after-mistake
+*.safe
+*.working

@@ -2,6 +2,7 @@ package com.breezybuilds.cheatstation.ui
 
 import android.os.Bundle
 import android.view.Menu
+import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import android.widget.CheckBox
@@ -73,8 +74,24 @@ class CheatsActivity : AppCompatActivity() {
         toolbar.menu.add(Menu.NONE, 1, 1, "Refresh cheats")
         toolbar.menu.add(Menu.NONE, 2, 2, "Select all")
         toolbar.menu.add(Menu.NONE, 3, 3, "Select none")
+        toolbar.menu.add(Menu.NONE, 5, 4, "Game information")
+        val searchItem = toolbar.menu.add(Menu.NONE, 4, 0, "Search cheats").apply {
+            setIcon(android.R.drawable.ic_menu_search)
+            setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+        }
         toolbar.setOnMenuItemClickListener {
             when (it.itemId) {
+                5 -> showGameInformation()
+                4 -> {
+                    val showing = search.visibility == View.VISIBLE
+                    search.visibility = if (showing) View.GONE else View.VISIBLE
+                    if (showing) {
+                        search.text?.clear()
+                        search.clearFocus()
+                    } else {
+                        search.requestFocus()
+                    }
+                }
                 1 -> loadCheats()
                 2 -> { selected.addAll(visibleRows().map { r -> r.key }); adapter.notifyDataSetChanged() }
                 3 -> { selected.clear(); adapter.notifyDataSetChanged() }
@@ -85,10 +102,10 @@ class CheatsActivity : AppCompatActivity() {
         progress = LinearProgressIndicator(ctx).apply { isIndeterminate = true; visibility = View.GONE }
         root.addView(progress, Ui.lp())
 
-        header = Ui.tv(ctx, "", 14f).apply { setPadding(Ui.dp(ctx, 16), Ui.dp(ctx, 8), Ui.dp(ctx, 16), Ui.dp(ctx, 4)) }
+        header = Ui.tv(ctx, "", 14f).apply {
+            setPadding(Ui.dp(ctx, 16), Ui.dp(ctx, 4), Ui.dp(ctx, 16), Ui.dp(ctx, 4))
+        }
         root.addView(header, Ui.lp())
-        sourceInfo = Ui.tv(ctx, "", 12f, secondary = true).apply { setPadding(Ui.dp(ctx, 16), 0, Ui.dp(ctx, 16), Ui.dp(ctx, 6)) }
-        root.addView(sourceInfo, Ui.lp())
 
         search = EditText(ctx).apply {
             hint = "Search cheats"
@@ -101,11 +118,16 @@ class CheatsActivity : AppCompatActivity() {
                 override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
             })
         }
+        search.visibility = View.GONE
         root.addView(search, Ui.lp().apply {
             setMargins(Ui.dp(ctx, 12), 0, Ui.dp(ctx, 12), Ui.dp(ctx, 6))
         })
 
-        compatBanner = Ui.banner(ctx)
+        compatBanner = Ui.tv(ctx, "", 12f).apply {
+            setTextColor(android.graphics.Color.rgb(190, 45, 45))
+            setPadding(Ui.dp(ctx, 16), 0, Ui.dp(ctx, 16), Ui.dp(ctx, 4))
+            visibility = View.GONE
+        }
         root.addView(compatBanner, Ui.lp())
         banner = Ui.banner(ctx)
         root.addView(banner, Ui.lp())
@@ -131,42 +153,73 @@ class CheatsActivity : AppCompatActivity() {
         loadCheats()
     }
 
-    private fun setBusy(b: Boolean) { busy = b; progress.visibility = if (b) View.VISIBLE else View.GONE; buttons.forEach { it.isEnabled = !b } }
+    private fun showGameInformation() {
+        val avail = loaded?.file?.cheats?.size
+        val inst = installedFile?.cheats?.size
+        val source = if (isPs2) app.ps2Settings.source().name else app.settings.source().displayName
+        val version = game.version ?: "Unknown"
+        val region = game.region ?: "Unknown"
+        val cacheInfo = loaded?.let {
+            if (it.fromCache) "Cached data" else "Fresh data"
+        } ?: "Not loaded"
+
+        val message = buildString {
+            append("Game: ").append(game.title).append("\n\n")
+            append("Title ID: ").append(game.titleId).append("\n")
+            append("System: ").append(if (isPs2) "PlayStation 2" else "Nintendo 3DS").append("\n")
+            append("Region: ").append(region).append("\n")
+            append("Version: ").append(version).append("\n\n")
+            append("Cheats available: ").append(avail ?: "Unknown").append("\n")
+            append("Cheats installed: ").append(inst ?: "Unknown").append("\n\n")
+            append("Source: ").append(source).append("\n")
+            append("Data: ").append(cacheInfo)
+        }
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Game information")
+            .setMessage(message)
+            .setPositiveButton("Close", null)
+            .show()
+    }
+    private fun setBusy(b: Boolean) {
+        busy = b
+        progress.visibility = if (b) View.VISIBLE else View.GONE
+        buttons.forEach { it.isEnabled = !b }
+    }
 
     private fun updateHeader() {
         val avail = loaded?.file?.cheats?.size
         val inst = installedFile?.cheats?.size
         header.text = buildString {
-            append(game.title).append('\n')
-            append("Title ID: ${game.titleId}\n")
-            append("Version: ${game.version ?: "unknown"}")
-            game.region?.let { append("  •  $it") }
-            append('\n')
-            append(if (avail != null) "$avail cheat(s) available" else "Available cheats: not loaded")
-            append("  •  ")
+            append(game.title).append("\n")
+            append(game.titleId).append(" • ").append(if (isPs2) "PS2" else "3DS").append("\n")
+            append(if (avail != null) "$avail cheat(s) available" else "Cheats not loaded")
+            append(" • ")
             append(if (inst != null) "$inst installed" else "installed: unknown")
         }
     }
 
     private fun refreshInfo() {
-        val l = loaded
-        val src = if (isPs2) app.ps2Settings.source().name else app.settings.source().displayName
-        sourceInfo.text = when {
-            l == null -> "Source: $src"
-            l.fromCache -> "Source: $src  •  CACHED data saved ${app.repository.formatTime(l.fetchedAt)} (not checked against the source just now)"
-            else -> "Source: $src  •  FRESH data downloaded ${app.repository.formatTime(l.fetchedAt)}"
-        }
         val c = compat
-        if (c?.message != null) Ui.show(compatBanner, Ui.Kind.WARN, c.message) else Ui.hide(compatBanner)
+        if (c?.message != null && c.status != Compatibility.Status.MATCH) {
+            compatBanner.text = "⚠ ${c.message}"
+            compatBanner.visibility = View.VISIBLE
+        } else {
+            compatBanner.text = ""
+            compatBanner.visibility = View.GONE
+        }
         rebuildRows()
     }
 
     private fun rebuildRows() {
         val remote = loaded?.file?.cheats.orEmpty().distinctBy { it.key }
         val inst = installedFile?.cheats.orEmpty()
-        val byKey = LinkedHashMap<String, Cheat>().also { m -> inst.forEach { if (!m.containsKey(it.key)) m[it.key] = it } }
+        val byKey = LinkedHashMap<String, Cheat>().also { m ->
+            inst.forEach { if (!m.containsKey(it.key)) m[it.key] = it }
+        }
         val list = remote.map { CheatRow(it.key, it.name, it, byKey[it.key]) } +
-            byKey.values.filter { i -> remote.none { it.key == i.key } }.map { CheatRow(it.key, it.name, null, it) }
+            byKey.values.filter { i -> remote.none { it.key == i.key } }
+                .map { CheatRow(it.key, it.name, null, it) }
         rows = list
         selected.retainAll(list.map { it.key }.toSet())
         adapter.notifyDataSetChanged()
@@ -192,7 +245,7 @@ class CheatsActivity : AppCompatActivity() {
                     compat = Compatibility.check(game.version, res.file.version)
                     when {
                         res.notice != null -> Ui.show(banner, Ui.Kind.WARN, res.notice)
-                        else -> Ui.show(banner, Ui.Kind.OK, "${res.file.cheats.size} cheat(s) found.")
+                        else -> Ui.hide(banner)
                     }
                 }
                 is CheatResult.Unavailable -> {
@@ -324,49 +377,79 @@ class CheatAdapter(
     private val supportsEnableToggle: Boolean = true,
 ) : RecyclerView.Adapter<CheatAdapter.VH>() {
 
-    class VH(val root: LinearLayout, val check: CheckBox, val sw: MaterialSwitch, val sub: TextView) : RecyclerView.ViewHolder(root)
+    class VH(
+        val root: LinearLayout,
+        val check: CheckBox,
+        val sw: MaterialSwitch
+    ) : RecyclerView.ViewHolder(root)
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
         val ctx = parent.context
+
         val root = Ui.vbox(ctx).apply {
-            layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-            setPadding(Ui.dp(ctx, 12), Ui.dp(ctx, 6), Ui.dp(ctx, 16), Ui.dp(ctx, 8))
+            layoutParams = RecyclerView.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            setPadding(
+                Ui.dp(ctx, 12),
+                Ui.dp(ctx, 6),
+                Ui.dp(ctx, 16),
+                Ui.dp(ctx, 6)
+            )
         }
-        val top = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
-        val check = CheckBox(ctx).apply { textSize = 16f }
+
+        val top = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+        }
+
+        val check = CheckBox(ctx).apply {
+            textSize = 16f
+        }
+
         val sw = MaterialSwitch(ctx)
-        top.addView(check, Ui.lp(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        top.addView(sw, Ui.lp(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        val sub = Ui.tv(ctx, "", 12f, secondary = true).apply { setPadding(Ui.dp(ctx, 40), 0, 0, 0) }
-        root.addView(top, Ui.lp()); root.addView(sub, Ui.lp())
-        return VH(root, check, sw, sub)
+
+        top.addView(
+            check,
+            Ui.lp(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        )
+
+        top.addView(
+            sw,
+            Ui.lp(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+
+        root.addView(top, Ui.lp())
+
+        return VH(root, check, sw)
     }
 
     override fun onBindViewHolder(h: VH, position: Int) {
         val r = rows()[position]
+
         h.check.setOnCheckedChangeListener(null)
         h.check.text = r.name
         h.check.isChecked = r.key in selected
-        h.check.setOnCheckedChangeListener { _, on -> onSelect(r.key, on) }
-        val category = when {
-            r.name.contains(Regex("money|coin|cash|credit", RegexOption.IGNORE_CASE)) -> "Currency"
-            r.name.contains(Regex("health|hp|life|damage|invincible", RegexOption.IGNORE_CASE)) -> "Gameplay"
-            r.name.contains(Regex("unlock|all|costume|weapon|item", RegexOption.IGNORE_CASE)) -> "Unlocks"
-            r.name.contains(Regex("speed|encounter|fps|quality|walk", RegexOption.IGNORE_CASE)) -> "Quality of Life"
-            else -> "Cheat"
+
+        h.check.setOnCheckedChangeListener { _, on ->
+            onSelect(r.key, on)
         }
-        h.sub.text = when {
-            r.remote == null -> "$category • Installed (not in the current source) • ${r.codeCount} code line(s)"
-            r.installed == null -> "$category • Not installed • ${r.codeCount} code line(s)"
-            r.differs -> "$category • Installed, but the code differs from the source • ${r.codeCount} code line(s)"
-            else -> "$category • Installed • ${r.codeCount} code line(s)"
-        }
+
         h.sw.setOnCheckedChangeListener(null)
+
         if (r.installed != null && supportsEnableToggle) {
             h.sw.visibility = View.VISIBLE
             h.sw.isChecked = r.installed.enabled
-            h.sw.setOnCheckedChangeListener { _, on -> onEnable(r, on) }
-        } else h.sw.visibility = View.GONE
+            h.sw.setOnCheckedChangeListener { _, on ->
+                onEnable(r, on)
+            }
+        } else {
+            h.sw.visibility = View.GONE
+        }
     }
 
     override fun getItemCount() = rows().size

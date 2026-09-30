@@ -7,6 +7,13 @@
         <package android:name="xyz.aethersx2.android" />
         <package android:name="xyz.aethersx2.android.debug" />
         <package android:name="xyz.aethersx2.android.test" />
+        <package android:name="org.dolphinemu.dolphinemu" />
+        <package android:name="org.citra.citra_emu" />
+        <package android:name="org.citra.citra" />
+        <package android:name="io.github.lime3ds.android" />
+        <package android:name="org.lime3ds.android" />
+        <package android:name="org.azahar_emu.android" />
+        <package android:name="org.azahar_emu.azahar" />
     </queries>
 
     <application
@@ -30,6 +37,7 @@
             </intent-filter>
         </activity>
         <activity android:name=".ui.CheatsActivity" android:exported="false" />
+        <activity android:name=".ui.DolphinCheatsActivity" android:exported="false" />
         <activity android:name=".ui.SettingsActivity" android:exported="false" />
         <activity android:name=".ui.SystemHubActivity" android:exported="false" />
         <activity android:name=".ui.Ps2Activity" android:exported="false" />

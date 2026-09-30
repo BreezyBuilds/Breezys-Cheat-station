@@ -48,11 +48,11 @@ class WelcomeActivity : AppCompatActivity() {
             Triple("PlayStation 2", "NetherSX2 / AetherSX2 PNACH cheats.") {
                 startActivity(Intent(this, SystemHubActivity::class.java).putExtra("system", 1))
             },
-            Triple("Nintendo Wii", "Wii cheat management — coming soon.") {
-                // Reserved for Wii implementation
+            Triple("Nintendo Wii", "Scan and manage Wii games and cheats.") {
+                startActivity(Intent(this, SystemHubActivity::class.java).putExtra("system", 2))
             },
-            Triple("Nintendo GameCube", "GameCube cheat management — coming soon.") {
-                // Reserved for GameCube implementation
+            Triple("Nintendo GameCube", "Scan and manage GameCube games and cheats.") {
+                startActivity(Intent(this, SystemHubActivity::class.java).putExtra("system", 3))
             }
         )
 
@@ -60,7 +60,7 @@ class WelcomeActivity : AppCompatActivity() {
             val card = systemButton(
                 item.first,
                 item.second,
-                enabled = index < 2,
+                enabled = true,
                 onClick = item.third
             )
 

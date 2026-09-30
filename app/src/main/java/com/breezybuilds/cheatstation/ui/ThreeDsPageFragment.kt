@@ -16,6 +16,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.progressindicator.LinearProgressIndicator
 import com.breezybuilds.cheatstation.app
+import com.breezybuilds.cheatstation.R
 import com.breezybuilds.cheatstation.data.DatabaseUpdater
 import com.breezybuilds.cheatstation.model.Game
 import com.breezybuilds.cheatstation.util.AppLog
@@ -50,27 +51,6 @@ class ThreeDsPageFragment : Fragment() {
 
         content = Ui.vbox(ctx)
 
-        val toolbar = com.google.android.material.appbar.MaterialToolbar(ctx).apply {
-            title = "Breezy's Cheat Station"
-            subtitle = "Nintendo 3DS • Cheat Manager"
-
-            menu.add(android.view.Menu.NONE, 1, 1, "Rescan games")
-            menu.add(android.view.Menu.NONE, 2, 2, "Add game by Title ID")
-            menu.add(android.view.Menu.NONE, 3, 3, "Refresh cheat database")
-            menu.add(android.view.Menu.NONE, 4, 4, "Settings")
-
-            setOnMenuItemClickListener {
-                when (it.itemId) {
-                    1 -> scan()
-                    2 -> addManual()
-                    3 -> refreshDatabase()
-                    4 -> startActivity(Intent(ctx, SettingsActivity::class.java))
-                }
-                true
-            }
-        }
-
-        content.addView(toolbar, Ui.lp())
 
         progress = LinearProgressIndicator(ctx).apply {
             isIndeterminate = true
@@ -79,12 +59,16 @@ class ThreeDsPageFragment : Fragment() {
         content.addView(progress, Ui.lp())
 
         banner = Ui.banner(ctx)
+        banner.setCompoundDrawablesWithIntrinsicBounds(0, 0, R.drawable.ic_close, 0)
+        banner.setCompoundDrawablePadding(Ui.dp(ctx, 8))
+        banner.setOnClickListener {
+            banner.visibility = View.GONE
+        }
         content.addView(banner, Ui.lp())
-
-        val dashboardCard = com.google.android.material.card.MaterialCardView(ctx).apply {
-            radius = Ui.dp(ctx, 16).toFloat()
-            setCardElevation(Ui.dp(ctx, 2).toFloat())
-            layoutParams = Ui.lp().apply {
+        dashboard = Ui.tv(ctx, "0 games found", 13f, secondary = true)
+        content.addView(
+            dashboard,
+            Ui.lp().apply {
                 setMargins(
                     Ui.dp(ctx, 12),
                     Ui.dp(ctx, 8),
@@ -92,18 +76,22 @@ class ThreeDsPageFragment : Fragment() {
                     Ui.dp(ctx, 4)
                 )
             }
-        }
-
-        val dash = Ui.vbox(ctx, 8)
-        dashboard = Ui.tv(ctx, "", 15f, bold = true)
-        dash.addView(dashboard, Ui.lp())
-        dashboardCard.addView(dash)
-        content.addView(dashboardCard)
+        )
 
         search = EditText(ctx).apply {
             hint = "Search by game name or Title ID"
             inputType = InputType.TYPE_CLASS_TEXT
             setSingleLine()
+              setCompoundDrawablesWithIntrinsicBounds(0, 0, R.drawable.ic_close, 0)
+              setCompoundDrawablePadding(Ui.dp(ctx, 8))
+              setOnTouchListener { v, event ->
+                  if (event.action == android.view.MotionEvent.ACTION_UP && event.x >= v.width - Ui.dp(ctx, 64)) {
+                      text?.clear()
+                      visibility = View.GONE
+                      clearFocus()
+                      true
+                  } else false
+              }
 
             addTextChangedListener(object : TextWatcher {
                 override fun afterTextChanged(s: Editable?) {
@@ -126,6 +114,7 @@ class ThreeDsPageFragment : Fragment() {
             })
         }
 
+        search.visibility = View.GONE
         content.addView(
             search,
             Ui.lp().apply {
@@ -179,7 +168,7 @@ class ThreeDsPageFragment : Fragment() {
         scanned = app.cache.loadGames()
         rebuild()
 
-        if (app.storage.rootDoc() != null) {
+        if (app.storage.has3dsStorage()) {
             if (scanned.isEmpty()) {
                 scan()
             } else {
@@ -205,15 +194,26 @@ class ThreeDsPageFragment : Fragment() {
 
         if (!::adapter.isInitialized) return
 
-        if (app.storage.rootDoc() != null) {
+        if (app.storage.has3dsStorage()) {
             loadCounts()
         }
     }
 
+    fun rescanGames() { scan() }
+
+    fun setSearchQuery(query: String) {
+        search.setText(query)
+        search.setSelection(search.text.length)
+    }
+
+    fun addGameByTitleId() { addManual() }
+
+    fun refreshCheatDatabase() { refreshDatabase() }
+
     private fun scan() {
         if (busy) return
 
-        if (app.storage.rootDoc() == null) {
+        if (!app.storage.has3dsStorage()) {
             Ui.show(
                 banner,
                 Ui.Kind.WARN,
@@ -303,7 +303,7 @@ class ThreeDsPageFragment : Fragment() {
 
         if (all.isEmpty()) {
             empty.text =
-                if (app.storage.rootDoc() != null) {
+                if (app.storage.has3dsStorage()) {
                     "No games found yet. Use ⋮ > Rescan games, or add a game by Title ID."
                 } else {
                     "No games yet — configure the 3DS folders in Settings."
@@ -390,11 +390,7 @@ class ThreeDsPageFragment : Fragment() {
         if (!::dashboard.isInitialized) return
 
         val total = all.size
-        val cached = availableCounts.values.sum()
-        val installed = installedCounts.values.sum()
-
-        dashboard.text =
-            "$total games  •  $cached cheats cached  •  $installed installed"
+        dashboard.text = "$total games found"
     }
 
     private fun describe(g: Game): List<String> {
