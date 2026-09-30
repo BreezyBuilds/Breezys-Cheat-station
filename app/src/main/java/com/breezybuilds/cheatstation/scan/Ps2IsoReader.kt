@@ -2,79 +2,270 @@ package com.breezybuilds.cheatstation.scan
 
 import android.content.Context
 import androidx.documentfile.provider.DocumentFile
-import com.breezybuilds.cheatstation.util.AppLog
 import java.io.FileInputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
-class Ps2IsoReader(private val ctx: Context, private val doc: DocumentFile) {
-    companion object { const val SECTOR = 2048; const val PVD = 16 * SECTOR }
-    private data class Entry(val name: String, val lba: Long, val size: Long, val dir: Boolean)
-    private var channel: java.nio.channels.FileChannel? = null
-
-    private fun open() = ctx.contentResolver.openFileDescriptor(doc.uri, "r")?.let { pfd -> FileInputStream(pfd.fileDescriptor).channel to pfd }
-    private fun read(offset: Long, length: Int): ByteArray? {
-        val p = open() ?: return null
-        return try {
-            val ch = p.first; val b = ByteBuffer.allocate(length); var pos = offset
-            while (b.hasRemaining()) { val n = ch.read(b, pos); if (n <= 0) break; pos += n }
-            b.flip(); ByteArray(b.remaining()).also { b.get(it) }
-        } finally { try { p.second.close() } catch (_: Exception) {} }
+class Ps2IsoReader(
+    private val ctx: Context,
+    private val doc: DocumentFile
+) {
+    companion object {
+        private const val SECTOR = 2048L
+        private const val PVD_SECTOR = 16L
+        private const val MAX_FILE_READ = 16 * 1024 * 1024
     }
-    private fun u32le(b: ByteArray, o: Int): Long = ByteBuffer.wrap(b, o, 4).order(ByteOrder.LITTLE_ENDIAN).int.toLong() and 0xffffffffL
 
-    private fun dirEntries(lba: Long, size: Long): List<Entry> {
-        val bytes = read(lba * SECTOR, size.coerceAtMost(4L * 1024 * 1024).toInt()) ?: return emptyList()
-        val out = mutableListOf<Entry>(); var p = 0
-        while (p + 34 <= bytes.size) {
-            val len = bytes[p].toInt() and 0xff
-            if (len == 0) { p = ((p / SECTOR) + 1) * SECTOR; continue }
-            if (p + len > bytes.size || len < 34) break
-            val extent = u32le(bytes, p + 2); val dataLen = u32le(bytes, p + 10); val flags = bytes[p + 25].toInt() and 0xff
-            val nameLen = bytes[p + 32].toInt() and 0xff
-            if (p + 33 + nameLen > bytes.size) break
-            val raw = bytes.copyOfRange(p + 33, p + 33 + nameLen)
-            val name = raw.toString(Charsets.US_ASCII).trimEnd('\u0000').trimEnd()
-            if (name != "\u0000" && name != "\u0001") out += Entry(name, extent, dataLen, flags and 2 != 0)
-            p += len
+    private data class Entry(
+        val name: String,
+        val lba: Long,
+        val size: Long,
+        val directory: Boolean
+    )
+
+    private fun read(offset: Long, length: Int): ByteArray? {
+        if (length <= 0) return ByteArray(0)
+
+        val pfd = try {
+            ctx.contentResolver.openFileDescriptor(doc.uri, "r")
+        } catch (_: Exception) {
+            null
+        } ?: return null
+
+        return try {
+            FileInputStream(pfd.fileDescriptor).channel.use { channel ->
+                val buffer = ByteBuffer.allocate(length)
+                var position = offset
+
+                while (buffer.hasRemaining()) {
+                    val n = channel.read(buffer, position)
+                    if (n <= 0) break
+                    position += n
+                }
+
+                buffer.flip()
+
+                if (!buffer.hasRemaining()) {
+                    null
+                } else {
+                    ByteArray(buffer.remaining()).also { buffer.get(it) }
+                }
+            }
+        } catch (_: Exception) {
+            null
+        } finally {
+            try {
+                pfd.close()
+            } catch (_: Exception) {
+            }
         }
-        return out
+    }
+
+    private fun u32le(bytes: ByteArray, offset: Int): Long {
+        return ByteBuffer.wrap(bytes, offset, 4)
+            .order(ByteOrder.LITTLE_ENDIAN)
+            .int
+            .toLong() and 0xffffffffL
+    }
+
+    private fun u32be(bytes: ByteArray, offset: Int): Long {
+        return ByteBuffer.wrap(bytes, offset, 4)
+            .order(ByteOrder.BIG_ENDIAN)
+            .int
+            .toLong() and 0xffffffffL
+    }
+
+    private fun directoryEntries(
+        lba: Long,
+        size: Long
+    ): List<Entry> {
+        val length = size
+            .coerceAtLeast(SECTOR)
+            .coerceAtMost(MAX_FILE_READ.toLong())
+            .toInt()
+
+        val bytes = read(lba * SECTOR, length) ?: return emptyList()
+
+        val result = mutableListOf<Entry>()
+        var position = 0
+
+        while (position + 34 <= bytes.size) {
+            val recordLength = bytes[position].toInt() and 0xff
+
+            if (recordLength == 0) {
+                position = ((position / SECTOR.toInt()) + 1) * SECTOR.toInt()
+                continue
+            }
+
+            if (recordLength < 34 || position + recordLength > bytes.size) {
+                break
+            }
+
+            val extentLba = u32le(bytes, position + 2)
+            val extentSize = u32le(bytes, position + 10)
+            val flags = bytes[position + 25].toInt() and 0xff
+            val nameLength = bytes[position + 32].toInt() and 0xff
+
+            if (position + 33 + nameLength > bytes.size) {
+                break
+            }
+
+            val rawName = bytes.copyOfRange(
+                position + 33,
+                position + 33 + nameLength
+            )
+
+            val name = rawName
+                .toString(Charsets.US_ASCII)
+                .trimEnd('\u0000')
+                .trimEnd()
+
+            if (name != "\u0000" && name != "\u0001") {
+                result += Entry(
+                    name = name,
+                    lba = extentLba,
+                    size = extentSize,
+                    directory = (flags and 2) != 0
+                )
+            }
+
+            position += recordLength
+        }
+
+        return result
+    }
+
+    private fun rootDirectory(): Entry? {
+        val pvd = read(PVD_SECTOR * SECTOR, SECTOR.toInt())
+            ?: return null
+
+        if (pvd.size < 190) return null
+
+        val recordLength = pvd[156].toInt() and 0xff
+
+        if (recordLength < 34 || 156 + recordLength > pvd.size) {
+            return null
+        }
+
+        val record = pvd.copyOfRange(
+            156,
+            156 + recordLength
+        )
+
+        val lba = u32le(record, 2)
+        val size = u32le(record, 10)
+
+        return Entry(
+            name = "/",
+            lba = lba,
+            size = size,
+            directory = true
+        )
+    }
+
+    private fun normaliseName(name: String): String {
+        return name
+            .substringBefore(';')
+            .trimEnd('.')
+            .uppercase()
     }
 
     private fun find(path: String): Entry? {
-        val root = read(PVD.toLong(), SECTOR) ?: return null
-        if (root.size < 157) return null
-        val rec = root.copyOfRange(156, 156 + (root[156].toInt() and 0xff))
-        val rootLba = u32le(rec, 2); val rootSize = u32le(rec, 10)
-        val parts = path.trim('/').split('/').filter { it.isNotBlank() }
-        fun walk(lba: Long, size: Long, idx: Int): Entry? {
-            val wanted = parts[idx].uppercase()
-            val e = dirEntries(lba, size).firstOrNull { it.name.substringBefore(';').uppercase() == wanted }
-            if (e == null) return null
-            return if (idx == parts.lastIndex) e else if (e.dir) walk(e.lba, e.size, idx + 1) else null
+        val root = rootDirectory() ?: return null
+
+        val parts = path
+            .trim('/')
+            .split('/')
+            .filter { it.isNotBlank() }
+
+        if (parts.isEmpty()) return null
+
+        var current = root
+
+        for (part in parts) {
+            if (!current.directory) return null
+
+            val wanted = normaliseName(part)
+
+            val match = directoryEntries(
+                current.lba,
+                current.size
+            ).firstOrNull {
+                normaliseName(it.name) == wanted
+            } ?: return null
+
+            current = match
         }
-        return if (parts.isEmpty()) null else walk(rootLba, rootSize, 0)
+
+        return current
     }
 
-    fun readFile(path: String): ByteArray? = find(path)?.let { read(it.lba * SECTOR, it.size.coerceAtMost(8L * 1024 * 1024).toInt()) }
+    fun readFile(path: String): ByteArray? {
+        val entry = find(path) ?: return null
+
+        if (entry.directory) return null
+
+        val length = entry.size
+            .coerceAtMost(MAX_FILE_READ.toLong())
+            .toInt()
+
+        return read(entry.lba * SECTOR, length)
+    }
 
     fun bootExecutable(): String? {
-        val cnf = readFile("SYSTEM.CNF") ?: return null
+        val cnf = readFile("SYSTEM.CNF")
+            ?: readFile("SYSTEM.CNF;1")
+            ?: return null
+
         val text = cnf.toString(Charsets.US_ASCII)
-        val line = text.lineSequence().firstOrNull { it.trimStart().startsWith("BOOT2", true) } ?: return null
-        val value = line.substringAfter('=', "").trim().trim('"')
-        return value.substringAfterLast('\\').substringAfterLast('/').substringBefore(';').trim().ifBlank { null }
+
+        val bootLine = text
+            .lineSequence()
+            .map { it.trim() }
+            .firstOrNull {
+                it.startsWith("BOOT2", ignoreCase = true) &&
+                    it.contains('=')
+            }
+            ?: return null
+
+        val value = bootLine
+            .substringAfter('=')
+            .trim()
+            .trim('"', '\'')
+
+        return value
+            .substringAfterLast('\\')
+            .substringAfterLast('/')
+            .substringBefore(';')
+            .trim()
+            .ifBlank { null }
     }
 
+    /**
+     * PCSX2's game CRC is an 8-character hash of the executable.
+     *
+     * The PS2 executable is read as 32-bit little-endian words and
+     * combined using XOR, producing the 32-bit value used in
+     * SERIAL_CRC.pnach filenames.
+     */
     fun elfCrc(exeName: String): Long? {
         val data = readFile(exeName) ?: return null
+        if (data.isEmpty()) return null
+
         var crc = 0L
-        var i = 0
-        while (i + 4 <= data.size) {
-            val v = (data[i].toLong() and 255) or ((data[i+1].toLong() and 255) shl 8) or ((data[i+2].toLong() and 255) shl 16) or ((data[i+3].toLong() and 255) shl 24)
-            crc = (crc xor v) and 0xffffffffL
-            i += 4
+        var offset = 0
+
+        while (offset + 4 <= data.size) {
+            val word =
+                (data[offset].toLong() and 0xffL) or
+                ((data[offset + 1].toLong() and 0xffL) shl 8) or
+                ((data[offset + 2].toLong() and 0xffL) shl 16) or
+                ((data[offset + 3].toLong() and 0xffL) shl 24)
+
+            crc = (crc xor word) and 0xffffffffL
+            offset += 4
         }
+
         return crc
     }
 }

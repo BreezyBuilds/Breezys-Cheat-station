@@ -36,6 +36,9 @@ class SettingsActivity : AppCompatActivity() {
     private val pickRoot = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { u -> if (u != null) accept(StorageManager.Slot.ROOT, u) }
     private val pickCheats = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { u -> if (u != null) accept(StorageManager.Slot.CHEATS, u) }
     private val pickGames = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { u -> if (u != null) accept(StorageManager.Slot.GAMES, u) }
+    private val pickPs2Root = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { u -> if (u != null) acceptPs2Root(u) }
+    private val pickPs2Games = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { u -> if (u != null) acceptPs2Games(u) }
+    private val pickPs2Transfer = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { u -> if (u != null) acceptPs2Transfer(u) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -77,6 +80,18 @@ class SettingsActivity : AppCompatActivity() {
         if (st.cheatsUri != null) btn("Use automatic cheats folder") { st.clear(StorageManager.Slot.CHEATS); render() }
         if (st.gamesUri != null) btn("Forget games folder") { st.clear(StorageManager.Slot.GAMES); render() }
 
+        section("PLAYSTATION 2 STORAGE")
+        val ps2 = app.ps2Storage
+        val detected = ps2.detectEmulator()
+        line("Emulator: " + (detected?.name ?: "Not detected"))
+        line("Emulator data: " + (ps2.manualPath ?: detected?.path ?: "Not configured"), true)
+        line("Games folder: " + (ps2.gamesUri?.let { ps2.describe(it) } ?: "Not configured"), true)
+        line("Transfer folder: " + (ps2.transferUri?.let { ps2.describe(it) } ?: "Not configured"), true)
+        btn("Auto-detect NetherSX2", true) { render() }
+        btn("Select emulator data folder") { pickPs2Root.launch(null) }
+        btn("Set emulator path manually") { ps2ManualPathDialog() }
+        btn("Select PS2 games folder") { pickPs2Games.launch(null) }
+        btn("Select transfer folder") { pickPs2Transfer.launch(null) }
         section("CHEAT SOURCE")
         line("Current source: ${src.displayName}", false)
         line("Branch ${src.branch}, folder \"${src.basePath}\", files ${src.fileNamePattern}", true)
@@ -125,6 +140,55 @@ class SettingsActivity : AppCompatActivity() {
         MaterialAlertDialogBuilder(this).setTitle("Folder problem").setMessage(err)
             .setPositiveButton("Use anyway") { _, _ -> if (slot == StorageManager.Slot.ROOT) app.storage.forceRoot(uri); render() }
             .setNegativeButton("Cancel", null).show()
+    }
+
+    private fun acceptPs2Root(uri: Uri) {
+        val err = app.ps2Storage.acceptRoot(uri)
+        if (err == null) { render(); note(Ui.Kind.OK, "PS2 emulator folder saved."); return }
+        MaterialAlertDialogBuilder(this).setTitle("NetherSX2 folder cannot be used").setMessage(err)
+            .setPositiveButton("Choose again") { _, _ -> pickPs2Root.launch(null) }
+            .setNegativeButton("Cancel", null).show()
+    }
+
+    private fun acceptPs2Games(uri: Uri) {
+        val err = app.ps2Storage.acceptGames(uri)
+        if (err == null) { render(); note(Ui.Kind.OK, "PS2 games folder saved."); return }
+        MaterialAlertDialogBuilder(this).setTitle("Games folder problem").setMessage(err)
+            .setPositiveButton("Choose again") { _, _ -> pickPs2Games.launch(null) }
+            .setNegativeButton("Cancel", null).show()
+    }
+
+    private fun acceptPs2Transfer(uri: Uri) {
+        val err = app.ps2Storage.acceptTransfer(uri)
+        if (err == null) { render(); note(Ui.Kind.OK, "PS2 transfer folder saved."); return }
+        MaterialAlertDialogBuilder(this).setTitle("Transfer folder problem").setMessage(err)
+            .setPositiveButton("Choose again") { _, _ -> pickPs2Transfer.launch(null) }
+            .setNegativeButton("Cancel", null).show()
+    }
+
+    private fun ps2ManualPathDialog() {
+        val input = EditText(this).apply {
+            hint = "/storage/emulated/0/Android/data/xyz.aethersx2.android/files"
+            setSingleLine()
+            setText(app.ps2Storage.manualPath ?: "")
+        }
+        val box = Ui.vbox(this, 12)
+        box.addView(input, Ui.lp())
+        MaterialAlertDialogBuilder(this)
+            .setTitle("PS2 emulator path")
+            .setMessage("Enter the NetherSX2/AetherSX2 data path manually if Android does not allow the folder picker to access it.")
+            .setView(box)
+            .setPositiveButton("Save") { _, _ ->
+                val err = app.ps2Storage.saveManualPath(input.text.toString())
+                if (err == null) { render(); note(Ui.Kind.OK, "PS2 emulator path saved.") }
+                else note(Ui.Kind.ERROR, err)
+            }
+            .setNeutralButton("Clear") { _, _ ->
+                app.ps2Storage.clearManualPath()
+                render()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun chooseRecommendedSource() {

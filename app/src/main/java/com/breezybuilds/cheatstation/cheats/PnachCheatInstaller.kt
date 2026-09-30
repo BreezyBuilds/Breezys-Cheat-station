@@ -7,7 +7,7 @@ import com.breezybuilds.cheatstation.storage.StoreException
 import com.breezybuilds.cheatstation.util.AppLog
 
 class PnachCheatInstaller(private val store: FileStore, private val backups: PnachBackupManager) {
-    fun path(key: String) = "${key.substringAfterLast('_', key)}.pnach"
+    fun path(key: String) = "${key}.pnach"
     fun readExisting(key: String): CheatFile = PnachParser.parse(store.readText(path(key)) ?: "", key, true)
     fun preview(key: String, incoming: List<Cheat>): MergeResult = CheatMerger.merge(readExisting(key), incoming)
     fun install(key: String, incoming: List<Cheat>, replaceKeys: Set<String> = emptySet()): InstallResult {

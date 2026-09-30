@@ -28,7 +28,7 @@ class Ps2Storage(private val ctx: Context) {
     data class EmulatorLocation(val name: String, val packageName: String, val path: String, val accessible: Boolean)
 
     fun detectEmulator(): EmulatorLocation? {
-        val candidates = listOf("xyz.aethersx2.android", "xyz.aethersx2.android.debug", "xyz.aethersx2.android.test")
+        val candidates = listOf("xyz.aethersx2.android", "xyz.aethersx2.android.debug", "xyz.aethersx2.android.test", "xyz.aethersx2.tturnip")
         for (pkg in candidates) {
             try {
                 val info = ctx.packageManager.getApplicationInfo(pkg, 0)

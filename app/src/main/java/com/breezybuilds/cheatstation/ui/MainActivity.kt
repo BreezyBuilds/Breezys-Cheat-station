@@ -63,7 +63,7 @@ class MainActivity : AppCompatActivity() {
 
         val toolbar = MaterialToolbar(ctx).apply {
             title = "Breezy's Cheat Station"
-            subtitle = "3DS + PS2 Cheat Manager"
+            subtitle = "Nintendo 3DS • Cheat Manager"
         }
         toolbar.menu.add(Menu.NONE, 1, 1, "Rescan games")
         toolbar.menu.add(Menu.NONE, 2, 2, "Add game by Title ID")
@@ -81,6 +81,7 @@ class MainActivity : AppCompatActivity() {
             true
         }
         root.addView(toolbar, Ui.lp())
+        root.addView(SystemTabs.create(ctx, 0), Ui.lp())
 
         progress = LinearProgressIndicator(ctx).apply { isIndeterminate = true; visibility = View.GONE }
         root.addView(progress, Ui.lp())
@@ -95,23 +96,15 @@ class MainActivity : AppCompatActivity() {
                 setMargins(Ui.dp(ctx, 12), Ui.dp(ctx, 8), Ui.dp(ctx, 12), Ui.dp(ctx, 4))
             }
         }
-        val dash = Ui.vbox(ctx, 14)
-        dashboard = Ui.tv(ctx, "", 16f, bold = true)
+        val dash = Ui.vbox(ctx, 8)
+        dashboard = Ui.tv(ctx, "", 15f, bold = true)
         databaseStatus = Ui.tv(ctx, "", 12f, secondary = true)
         storageStatus = Ui.tv(ctx, "", 12f, secondary = true)
         sourceStatus = Ui.tv(ctx, "", 12f, secondary = true)
         dash.addView(dashboard, Ui.lp())
-        dash.addView(databaseStatus, Ui.lp())
-        dash.addView(storageStatus, Ui.lp())
-        dash.addView(sourceStatus, Ui.lp())
-        val dashboardButtons = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
-        dashboardButtons.addView(Ui.button(ctx, "Folders") {
-            startActivity(Intent(ctx, SettingsActivity::class.java).putExtra("open_section", "folders"))
-        }, Ui.lp(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { rightMargin = Ui.dp(ctx, 4) })
-        dashboardButtons.addView(Ui.button(ctx, "Cheat source") {
-            startActivity(Intent(ctx, SettingsActivity::class.java).putExtra("open_section", "source"))
-        }, Ui.lp(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = Ui.dp(ctx, 4) })
-        dash.addView(dashboardButtons, Ui.lp())
+        databaseStatus.visibility = View.GONE
+        storageStatus.visibility = View.GONE
+        sourceStatus.visibility = View.GONE
         dashboardCard.addView(dash)
         root.addView(dashboardCard)
 
