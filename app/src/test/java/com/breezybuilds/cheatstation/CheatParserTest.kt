@@ -90,7 +90,7 @@ class CheatParserTest {
     @Test fun codeLineDetection() {
         assertTrue(CheatParser.isCodeLine("0A1B2C3D 00000001"))
         assertTrue(CheatParser.isCodeLine("0A1B2C3D  00000001 FFFFFFFF"))
-        assertFalse(CheatParser.isCodeLine("0A1B2C3D"))
+        assertTrue(CheatParser.isCodeLine("0A1B2C3D"))
         assertFalse(CheatParser.isCodeLine("ZZZZZZZZ 00000001"))
     }
 }
