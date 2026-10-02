@@ -9,7 +9,6 @@ import androidx.documentfile.provider.DocumentFile
 import com.breezybuilds.cheatstation.util.AppLog
 import com.breezybuilds.cheatstation.emulator.EmulatorDetector
 import java.io.File
-import com.breezybuilds.cheatstation.storage.DirectFileStore
 
 /** Handles the Storage Access Framework grants and turns them into [FileStore]s. */
 class StorageManager(private val ctx: Context) {
@@ -30,6 +29,49 @@ class StorageManager(private val ctx: Context) {
         private set(v) = prefs.edit { putString("games_uri", v?.toString()) }
 
     enum class Slot { ROOT, CHEATS, GAMES }
+
+    private fun emulatorRootKey(packageName: String): String =
+        "3ds_root_uri_" + packageName.replace(Regex("[^A-Za-z0-9_.-]"), "_")
+
+    var selected3dsEmulatorPackage: String?
+        get() = prefs.getString("selected_3ds_emulator_package", null)
+        private set(value) = prefs.edit {
+            if (value == null) remove("selected_3ds_emulator_package")
+            else putString("selected_3ds_emulator_package", value)
+        }
+
+    fun setSelected3dsEmulator(packageName: String) {
+        selected3dsEmulatorPackage = packageName
+    }
+
+    fun emulatorRootUri(packageName: String): Uri? =
+        prefs.getString(emulatorRootKey(packageName), null)?.let(Uri::parse)
+
+    fun saveEmulatorRootUri(packageName: String, uri: Uri) {
+        prefs.edit {
+            putString(emulatorRootKey(packageName), uri.toString())
+        }
+    }
+
+    fun selected3dsRootUri(): Uri? {
+        val packageName = selected3dsEmulatorPackage ?: return null
+
+        emulatorRootUri(packageName)?.let { return it }
+
+        return null
+    }
+
+    fun selected3dsRootDoc(): DocumentFile? =
+        selected3dsRootUri()
+            ?.takeIf { hasPermission(it) }
+            ?.let { DocumentFile.fromTreeUri(ctx, it) }
+            ?.takeIf { it.exists() && it.isDirectory }
+
+    fun clearEmulatorRoot(packageName: String) {
+        prefs.edit {
+            remove(emulatorRootKey(packageName))
+        }
+    }
 
     /** Persists the grant and remembers it. Returns null on success or an error message. */
     fun accept(slot: Slot, uri: Uri): String? {
@@ -61,7 +103,9 @@ class StorageManager(private val ctx: Context) {
     fun hasPermission(uri: Uri?): Boolean = uri != null &&
         resolver.persistedUriPermissions.any { it.uri == uri && it.isReadPermission && it.isWritePermission }
 
-    fun rootDoc(): DocumentFile? = autoDetect3dsFolder()?.let { DocumentFile.fromFile(it) } ?: rootUri?.takeIf { hasPermission(it) }?.let { DocumentFile.fromTreeUri(ctx, it) }?.takeIf { it.exists() }
+    fun rootDoc(): DocumentFile? =
+        selected3dsRootDoc()
+            ?: autoDetect3dsFolder()?.let { DocumentFile.fromFile(it) }
 
     /** Common markers found in 3DS emulator data/user folders. */
     private val markers = listOf("sdmc", "nand", "config", "cheats", "sysdata", "log", "states", "shaders")
@@ -81,41 +125,61 @@ class StorageManager(private val ctx: Context) {
      * (2) otherwise return a folder-picker hint pointing at the most likely location.
      */
     fun autoDetectExistingGrant(): Uri? {
-        rootUri?.takeIf { hasPermission(it) }?.let { uri ->
-            val doc = DocumentFile.fromTreeUri(ctx, uri)
-            if (doc != null && doc.exists() && doc.isDirectory &&
-                (doc.name.equals("Azahar", true) || validateRoot(doc).first)) {
-                AppLog.i("Storage", "Reusing saved 3DS emulator folder grant: ${doc.name}")
-                return uri
-            }
+        val packageName = selected3dsEmulatorPackage ?: return null
+
+        val uri = emulatorRootUri(packageName) ?: return null
+
+        val doc = DocumentFile.fromTreeUri(ctx, uri)
+            ?: return null
+
+        if (!doc.exists() || !doc.isDirectory || !hasPermission(uri)) {
+            return null
         }
 
-        for (p in resolver.persistedUriPermissions) {
-            if (!p.isReadPermission || !p.isWritePermission) continue
-            val doc = DocumentFile.fromTreeUri(ctx, p.uri) ?: continue
-            if (validateRoot(doc).first && doc.listFiles().any {
-                    it.name.equals("sdmc", true) ||
-                    it.name.equals("cheats", true) ||
-                    it.name.equals("nand", true)
-                }) {
-                AppLog.i("Storage", "Reusing an existing folder grant")
-                rootUri = p.uri
-                return p.uri
-            }
+        if (!validateRoot(doc).first) {
+            return null
         }
-        return null
+
+        AppLog.i(
+            "Storage",
+            "Reusing saved 3DS folder for $packageName: ${doc.name}"
+        )
+
+        return uri
     }
 
     /** Automatically finds a likely 3DS emulator folder when Android exposes it directly. */
     fun autoDetect3dsFolder(): File? {
-        val emulator = EmulatorDetector.detect3dsEmulator(ctx)
-        val names = when (emulator?.name) {
-            "Azahar" -> listOf("Azahar", "azahar-emu", "citra-emu", "Citra")
-            "Citra" -> listOf("citra-emu", "Citra", "citra")
-            "Lime3DS" -> listOf("lime3ds", "Lime3DS", "citra-emu")
-            else -> listOf("citra-emu", "Citra", "Lime3DS", "Azahar", "azahar-emu")
+        val selectedPackage = selected3dsEmulatorPackage ?: return null
+
+        val emulator = EmulatorDetector
+            .detect3dsEmulators(ctx)
+            .firstOrNull { it.packageName == selectedPackage }
+            ?: return null
+
+        val names = when (emulator.name) {
+            "Azahar" -> listOf(
+                "Azahar",
+                "azahar-emu"
+            )
+
+            "Citra" -> listOf(
+                "citra-emu",
+                "Citra",
+                "citra"
+            )
+
+            "Lime3DS" -> listOf(
+                "lime3ds",
+                "Lime3DS",
+                "citra-emu"
+            )
+
+            else -> emptyList()
         }
+
         val base = File("/storage/emulated/0")
+
         val candidates = names.flatMap { name ->
             listOf(
                 File(base, name),
@@ -123,37 +187,80 @@ class StorageManager(private val ctx: Context) {
                 File(base, "Android/data/$name/files/citra-emu")
             )
         }
+
         return candidates.firstOrNull { folder ->
             try {
-                folder.exists() && folder.isDirectory && folder.listFiles()?.any { child ->
-                    child.name.equals("sdmc", true) ||
-                    child.name.equals("nand", true) ||
-                    child.name.equals("config", true) ||
-                    child.name.equals("cheats", true)
-                } == true
+                folder.exists() &&
+                    folder.isDirectory &&
+                    folder.listFiles()?.any { child ->
+                        child.name.equals("sdmc", true) ||
+                        child.name.equals("nand", true) ||
+                        child.name.equals("config", true) ||
+                        child.name.equals("cheats", true)
+                    } == true
             } catch (_: Exception) {
                 false
             }
         }
     }
+
     /** Where to open the system folder picker near common 3DS emulator locations. */
     fun pickerHint(): Uri? {
-        val emulator = EmulatorDetector.detect3dsEmulator(ctx)
-        val rel = if (emulator?.name == "Azahar") {
-            "Azahar"
-        } else {
-            val candidates = listOf("citra-emu", "Citra", "3ds", "emulator", "Android/data")
-            val base = File("/storage/emulated/0")
-            candidates.firstOrNull { try { File(base, it).exists() } catch (_: Exception) { false } } ?: candidates.last()
+        val emulator =
+            selected3dsEmulatorPackage?.let { packageName ->
+                EmulatorDetector
+                    .detect3dsEmulators(ctx)
+                    .firstOrNull { it.packageName == packageName }
+            }
+                ?: EmulatorDetector.detect3dsEmulator(ctx)
+
+        val rel = when (emulator?.name) {
+            "Azahar" -> "Azahar"
+
+            "Citra" -> {
+                val candidates =
+                    listOf("citra-emu", "Citra", "citra")
+
+                val base = File("/storage/emulated/0")
+
+                candidates.firstOrNull {
+                    try {
+                        File(base, it).exists()
+                    } catch (_: Exception) {
+                        false
+                    }
+                } ?: candidates.first()
+            }
+
+            "Lime3DS" -> {
+                val candidates =
+                    listOf("Lime3DS", "lime3ds", "citra-emu")
+
+                val base = File("/storage/emulated/0")
+
+                candidates.firstOrNull {
+                    try {
+                        File(base, it).exists()
+                    } catch (_: Exception) {
+                        false
+                    }
+                } ?: candidates.first()
+            }
+
+            else -> "Android/data"
         }
+
         return try {
-            DocumentsContract.buildDocumentUri("com.android.externalstorage.documents", "primary:$rel")
-        } catch (_: Exception) { null }
+            DocumentsContract.buildDocumentUri(
+                "com.android.externalstorage.documents",
+                "primary:$rel"
+            )
+        } catch (_: Exception) {
+            null
+        }
     }
 
     fun has3dsStorage(): Boolean = autoDetect3dsFolder()?.isDirectory == true || rootDoc() != null
-
-    fun rootStore(): FileStore? = autoDetect3dsFolder()?.let { DirectFileStore(it) } ?: rootDoc()?.let { DocumentFileStore(ctx, it) }
 
     /** Store rooted at the cheats folder (created inside a validated emulator data folder when missing). */
     fun cheatsStore(): FileStore? {
@@ -174,8 +281,6 @@ class StorageManager(private val ctx: Context) {
         return DocumentFileStore(ctx, dir)
     }
 
-    fun gamesStore(): FileStore? = gamesUri?.takeIf { hasPermission(it) }
-        ?.let { DocumentFile.fromTreeUri(ctx, it) }?.let { DocumentFileStore(ctx, it) }
 
     fun describe(uri: Uri?): String {
         if (uri == null) return "Not set"
@@ -184,8 +289,17 @@ class StorageManager(private val ctx: Context) {
         return (doc?.name ?: decoded).ifBlank { decoded } + if (!hasPermission(uri)) "  (permission lost)" else ""
     }
     fun describe3dsRoot(): String {
+        if (selected3dsEmulatorPackage == null) {
+            return "Not configured"
+        }
+
         autoDetect3dsFolder()?.let { return it.path }
-        return describe(rootUri)
+
+        selected3dsRootUri()?.let {
+            return describe(it)
+        }
+
+        return "Not configured"
     }
 
 }

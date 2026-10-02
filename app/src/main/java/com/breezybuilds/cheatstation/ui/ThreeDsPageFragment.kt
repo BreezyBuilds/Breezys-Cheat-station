@@ -2,12 +2,10 @@ package com.breezybuilds.cheatstation.ui
 
 import android.content.Intent
 import android.os.Bundle
-import android.text.Editable
-import android.text.InputType
-import android.text.TextWatcher
 import android.view.View
-import android.view.ViewGroup
+import android.text.InputType
 import android.widget.EditText
+import android.view.ViewGroup
 import android.widget.TextView
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
@@ -30,7 +28,7 @@ class ThreeDsPageFragment : Fragment() {
     private lateinit var content: ViewGroup
     private lateinit var banner: TextView
     private lateinit var progress: LinearProgressIndicator
-    private lateinit var search: EditText
+    private var searchQuery = ""
     private lateinit var empty: TextView
     private lateinit var dashboard: TextView
     private lateinit var adapter: GameAdapter
@@ -74,55 +72,6 @@ class ThreeDsPageFragment : Fragment() {
                     Ui.dp(ctx, 8),
                     Ui.dp(ctx, 12),
                     Ui.dp(ctx, 4)
-                )
-            }
-        )
-
-        search = EditText(ctx).apply {
-            hint = "Search by game name or Title ID"
-            inputType = InputType.TYPE_CLASS_TEXT
-            setSingleLine()
-              setCompoundDrawablesWithIntrinsicBounds(0, 0, R.drawable.ic_close, 0)
-              setCompoundDrawablePadding(Ui.dp(ctx, 8))
-              setOnTouchListener { v, event ->
-                  if (event.action == android.view.MotionEvent.ACTION_UP && event.x >= v.width - Ui.dp(ctx, 64)) {
-                      text?.clear()
-                      visibility = View.GONE
-                      clearFocus()
-                      true
-                  } else false
-              }
-
-            addTextChangedListener(object : TextWatcher {
-                override fun afterTextChanged(s: Editable?) {
-                    applyFilter()
-                }
-
-                override fun beforeTextChanged(
-                    s: CharSequence?,
-                    start: Int,
-                    count: Int,
-                    after: Int
-                ) {}
-
-                override fun onTextChanged(
-                    s: CharSequence?,
-                    start: Int,
-                    before: Int,
-                    count: Int
-                ) {}
-            })
-        }
-
-        search.visibility = View.GONE
-        content.addView(
-            search,
-            Ui.lp().apply {
-                setMargins(
-                    Ui.dp(ctx, 12),
-                    Ui.dp(ctx, 4),
-                    Ui.dp(ctx, 12),
-                    0
                 )
             }
         )
@@ -202,8 +151,8 @@ class ThreeDsPageFragment : Fragment() {
     fun rescanGames() { scan() }
 
     fun setSearchQuery(query: String) {
-        search.setText(query)
-        search.setSelection(search.text.length)
+        searchQuery = query
+        applyFilter()
     }
 
     fun addGameByTitleId() { addManual() }
@@ -312,12 +261,9 @@ class ThreeDsPageFragment : Fragment() {
     }
 
     private fun applyFilter() {
-        if (!::adapter.isInitialized || !::search.isInitialized) return
+        if (!::adapter.isInitialized) return
 
-        val q = search.text
-            ?.toString()
-            ?.trim()
-            .orEmpty()
+        val q = searchQuery.trim()
 
         val filtered =
             if (q.isEmpty()) {

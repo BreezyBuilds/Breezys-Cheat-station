@@ -28,16 +28,122 @@ class Ps2Storage(private val ctx: Context) {
     data class EmulatorLocation(val name: String, val packageName: String, val path: String, val accessible: Boolean)
 
     fun detectEmulator(): EmulatorLocation? {
-        val candidates = listOf("xyz.aethersx2.android", "xyz.aethersx2.android.debug", "xyz.aethersx2.android.test", "xyz.aethersx2.tturnip")
-        for (pkg in candidates) {
+        val pm = ctx.packageManager
+
+        data class Candidate(
+            val packageName: String,
+            val label: String,
+            val path: String,
+            val score: Int
+        )
+
+        val candidates = mutableListOf<Candidate>()
+
+        /*
+         * Known NetherSX2/AetherSX2 packages remain strong candidates.
+         * This also covers the common Turnip package.
+         */
+        val knownPackages = listOf(
+            "xyz.aethersx2.android",
+            "xyz.aethersx2.android.debug",
+            "xyz.aethersx2.android.test",
+            "xyz.aethersx2.tturnip"
+        )
+
+        for (pkg in knownPackages) {
             try {
-                val info = ctx.packageManager.getApplicationInfo(pkg, 0)
-                val label = ctx.packageManager.getApplicationLabel(info).toString()
+                val info = pm.getApplicationInfo(pkg, 0)
+                val label = pm.getApplicationLabel(info).toString()
                 val path = "/storage/emulated/0/Android/data/$pkg/files"
-                return EmulatorLocation(label, pkg, path, File(path).isDirectory)
-            } catch (_: PackageManager.NameNotFoundException) { }
+
+                candidates += Candidate(
+                    packageName = pkg,
+                    label = label,
+                    path = path,
+                    score = if (File(path).isDirectory) 120 else 110
+                )
+            } catch (_: PackageManager.NameNotFoundException) {
+                // Not installed or not visible.
+            }
         }
-        return null
+
+        /*
+         * Android package visibility can hide arbitrary installed apps,
+         * but launcher applications are normally queryable. NetherSX2
+         * Classic and Turnip both have launcher activities, so inspect
+         * those rather than relying on QUERY_ALL_PACKAGES.
+         */
+        val launcherIntent = Intent(Intent.ACTION_MAIN).apply {
+            addCategory(Intent.CATEGORY_LAUNCHER)
+        }
+
+        val launchableApps = try {
+            pm.queryIntentActivities(
+                launcherIntent,
+                PackageManager.MATCH_ALL
+            )
+        } catch (_: Exception) {
+            emptyList()
+        }
+
+        for (resolveInfo in launchableApps) {
+            val info = resolveInfo.activityInfo?.applicationInfo ?: continue
+            val pkg = info.packageName
+
+            if (candidates.any { it.packageName == pkg }) continue
+
+            val label = try {
+                pm.getApplicationLabel(info).toString()
+            } catch (_: Exception) {
+                ""
+            }
+
+            val packageText = pkg.lowercase()
+            val labelText = label.lowercase()
+
+            var score = 0
+
+            // NetherSX2 variants, including Turnip forks.
+            if ("nether" in packageText) score += 100
+            if ("nether" in labelText) score += 100
+
+            // Explicit Turnip recognition.
+            if ("turnip" in packageText) score += 100
+            if ("turnip" in labelText) score += 100
+
+            // Other common PS2 emulator families.
+            if ("aether" in packageText) score += 80
+            if ("aethersx2" in labelText) score += 80
+            if ("pcsx2" in packageText) score += 80
+            if ("pcsx2" in labelText) score += 80
+
+            // Require a recognisable PS2 emulator identity.
+            if (score == 0) continue
+
+            val path = "/storage/emulated/0/Android/data/$pkg/files"
+
+            if (File(path).isDirectory) {
+                score += 20
+            }
+
+            candidates += Candidate(
+                packageName = pkg,
+                label = label,
+                path = path,
+                score = score
+            )
+        }
+
+        return candidates
+            .maxByOrNull { it.score }
+            ?.let {
+                EmulatorLocation(
+                    name = it.label.ifBlank { it.packageName },
+                    packageName = it.packageName,
+                    path = it.path,
+                    accessible = File(it.path).isDirectory
+                )
+            }
     }
 
     fun saveManualPath(path: String): String? {

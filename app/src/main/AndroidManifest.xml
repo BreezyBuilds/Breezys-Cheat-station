@@ -26,10 +26,6 @@
         android:theme="@style/Theme.BreezyCheatStation"
         android:usesCleartextTraffic="false">
 
-        <activity
-            android:name=".ui.MainActivity"
-            android:exported="false">
-        </activity>
         <activity android:name=".ui.WelcomeActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -40,6 +36,5 @@
         <activity android:name=".ui.DolphinCheatsActivity" android:exported="false" />
         <activity android:name=".ui.SettingsActivity" android:exported="false" />
         <activity android:name=".ui.SystemHubActivity" android:exported="false" />
-        <activity android:name=".ui.Ps2Activity" android:exported="false" />
     </application>
 </manifest>

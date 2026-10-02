@@ -4,7 +4,6 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
-import android.widget.EditText
 import android.widget.TextView
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
@@ -12,7 +11,6 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.breezybuilds.cheatstation.app
 import com.breezybuilds.cheatstation.model.Game
-import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.progressindicator.LinearProgressIndicator
 import kotlinx.coroutines.Dispatchers
@@ -23,7 +21,7 @@ class Ps2PageFragment : Fragment() {
 
     private lateinit var banner: TextView
     private lateinit var progress: LinearProgressIndicator
-    private lateinit var search: EditText
+    private var searchQuery = ""
     private lateinit var empty: TextView
     private lateinit var dashboard: TextView
     private lateinit var setupStatus: TextView
@@ -80,48 +78,6 @@ class Ps2PageFragment : Fragment() {
                 setMargins(
                     Ui.dp(ctx, 12),
                     0,
-                    Ui.dp(ctx, 12),
-                    Ui.dp(ctx, 4)
-                )
-            }
-        )
-
-        search = EditText(ctx).apply {
-            hint = "🔎 Search games"
-            setSingleLine()
-
-            addTextChangedListener(
-                object : android.text.TextWatcher {
-                    override fun afterTextChanged(
-                        s: android.text.Editable?
-                    ) {
-                        updateAdapter()
-                    }
-
-                    override fun beforeTextChanged(
-                        s: CharSequence?,
-                        start: Int,
-                        count: Int,
-                        after: Int
-                    ) = Unit
-
-                    override fun onTextChanged(
-                        s: CharSequence?,
-                        start: Int,
-                        before: Int,
-                        count: Int
-                    ) = Unit
-                }
-            )
-        }
-
-        search.visibility = View.GONE
-        root.addView(
-            search,
-            Ui.lp().apply {
-                setMargins(
-                    Ui.dp(ctx, 12),
-                    Ui.dp(ctx, 6),
                     Ui.dp(ctx, 12),
                     Ui.dp(ctx, 4)
                 )
@@ -249,8 +205,7 @@ class Ps2PageFragment : Fragment() {
     }
 
     private fun filtered(): List<Game> {
-        val query =
-            search.text?.toString()?.trim().orEmpty()
+        val query = searchQuery.trim()
 
         if (query.isEmpty()) return games
 
@@ -315,8 +270,8 @@ class Ps2PageFragment : Fragment() {
     fun rescanGames() { scan() }
 
     fun setSearchQuery(query: String) {
-        search.setText(query)
-        search.setSelection(search.text.length)
+        searchQuery = query
+        updateAdapter()
     }
 
     fun openCheatSource() { sourceDialog() }

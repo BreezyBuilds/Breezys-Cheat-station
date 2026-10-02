@@ -150,28 +150,99 @@ class SettingsActivity : AppCompatActivity() {
     }
 
 
+    private fun choose3dsEmulator() {
+        val emulators =
+            com.breezybuilds.cheatstation.emulator.EmulatorDetector
+                .detect3dsEmulators(this)
+
+        if (emulators.isEmpty()) {
+            Ui.show(
+                banner,
+                Ui.Kind.INFO,
+                "No supported 3DS emulator was detected."
+            )
+            return
+        }
+
+        val selected = app.storage.selected3dsEmulatorPackage
+        val checked = emulators
+            .map { it.packageName }
+            .indexOf(selected)
+            .coerceAtLeast(0)
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle("3DS emulator")
+            .setSingleChoiceItems(
+                emulators.map {
+                    "${it.name}  •  ${it.packageName}"
+                }.toTypedArray(),
+                checked
+            ) { dialog, which ->
+                val emulator = emulators[which]
+
+                app.storage.setSelected3dsEmulator(
+                    emulator.packageName
+                )
+
+                render()
+                Ui.show(
+                    banner,
+                    Ui.Kind.OK,
+                    "${emulator.name} selected."
+                )
+
+                dialog.dismiss()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
     private fun autoDetect3ds() {
         val st = app.storage
-        val detected = com.breezybuilds.cheatstation.emulator.EmulatorDetector.detect3dsEmulator(this)
+        val detected =
+            com.breezybuilds.cheatstation.emulator.EmulatorDetector
+                .detect3dsEmulator(this)
 
+        if (detected == null) {
+            Ui.show(
+                banner,
+                Ui.Kind.INFO,
+                "No supported 3DS emulator was detected. Select your emulator manually."
+            )
+            return
+        }
+
+        // Select the detected emulator before looking for storage.
+        st.setSelected3dsEmulator(detected.packageName)
+
+        // Reuse storage already associated with this exact emulator.
         if (st.autoDetectExistingGrant() != null) {
+            Ui.show(
+                banner,
+                Ui.Kind.OK,
+                "✓ ${detected.name} detected and its existing folder access was reused."
+            )
+            render()
+            return
+        }
 
+        // Try direct filesystem discovery for this selected emulator.
         val detectedFolder = st.autoDetect3dsFolder()
         if (detectedFolder != null) {
-            Ui.show(banner, Ui.Kind.OK, "✓ Found 3DS emulator data: ${detectedFolder.path}")
-            render()
-            return
-        }
-            Ui.show(banner, Ui.Kind.OK, "✓ Reused your existing 3DS emulator folder access.")
+            Ui.show(
+                banner,
+                Ui.Kind.OK,
+                "✓ ${detected.name} detected: ${detectedFolder.path}"
+            )
             render()
             return
         }
 
-        if (detected != null) {
-            Ui.show(banner, Ui.Kind.INFO, "${detected.name} detected. Select its data folder to give Breezy's Cheat Station access.")
-        } else {
-            Ui.show(banner, Ui.Kind.INFO, "No supported 3DS emulator was detected. Select your emulator data folder manually.")
-        }
+        Ui.show(
+            banner,
+            Ui.Kind.INFO,
+            "${detected.name} detected. Select its data folder to give Breezy's Cheat Station access."
+        )
 
         pickRoot.launch(st.pickerHint())
     }
@@ -182,11 +253,46 @@ class SettingsActivity : AppCompatActivity() {
         val src = app.settings.source()
 
         section("3DS EMULATOR STORAGE")
+        val detected3ds =
+            com.breezybuilds.cheatstation.emulator.EmulatorDetector
+                .detect3dsEmulators(this)
+
+        val selected3ds =
+            detected3ds.firstOrNull {
+                it.packageName == st.selected3dsEmulatorPackage
+            }
+
+        line(
+            "Emulator: " +
+                (selected3ds?.name ?: "Not selected"),
+            true
+        )
+
+        if (selected3ds != null) {
+            line(
+                "Package: ${selected3ds.packageName}",
+                true
+            )
+        }
+
         line("Emulator data folder: " + st.describe3dsRoot())
         line("Cheats folder: " + if (st.cheatsUri != null) st.describe(st.cheatsUri) else "automatic (<data folder>/cheats)", true)
         line("Games folder: " + st.describe(st.gamesUri), true)
-        btn("🔍 Auto-detect 3DS emulator", true) { autoDetect3ds() }
+
+        btn("Choose 3DS emulator…", true) {
+            choose3dsEmulator()
+        }
+
+        btn("🔍 Auto-detect 3DS emulator", true) {
+            autoDetect3ds()
+        }
         btn("Change emulator data folder", true) { pickRoot.launch(st.pickerHint()) }
+        if (selected3ds != null && st.selected3dsRootUri() != null) {
+            btn("Forget emulator data folder") {
+                st.selected3dsEmulatorPackage?.let { st.clearEmulatorRoot(it) }
+                render()
+            }
+        }
         btn("Select a different cheats folder…") { pickCheats.launch(st.rootUri) }
         btn("Select a games folder (CIA/3DS/CXI)…") { pickGames.launch(null) }
         if (st.cheatsUri != null) btn("Use automatic cheats folder") { st.clear(StorageManager.Slot.CHEATS); render() }
@@ -297,10 +403,35 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun accept(slot: StorageManager.Slot, uri: Uri) {
         val err = app.storage.accept(slot, uri)
-        if (err == null) { render(); note(Ui.Kind.OK, "Folder saved."); return }
-        MaterialAlertDialogBuilder(this).setTitle("Folder problem").setMessage(err)
-            .setPositiveButton("Use anyway") { _, _ -> if (slot == StorageManager.Slot.ROOT) app.storage.forceRoot(uri); render() }
-            .setNegativeButton("Cancel", null).show()
+
+        if (err == null) {
+            if (slot == StorageManager.Slot.ROOT) {
+                app.storage.selected3dsEmulatorPackage?.let { packageName ->
+                    app.storage.saveEmulatorRootUri(packageName, uri)
+                }
+            }
+
+            render()
+            note(Ui.Kind.OK, "Folder saved.")
+            return
+        }
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Folder problem")
+            .setMessage(err)
+            .setPositiveButton("Use anyway") { _, _ ->
+                if (slot == StorageManager.Slot.ROOT) {
+                    app.storage.forceRoot(uri)
+
+                    app.storage.selected3dsEmulatorPackage?.let { packageName ->
+                        app.storage.saveEmulatorRootUri(packageName, uri)
+                    }
+                }
+
+                render()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun acceptPs2Root(uri: Uri) {
