@@ -351,31 +351,150 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun renderSystems() {
-        content.addView(Ui.tv(this, "Choose a system to configure", 15f, secondary = true), Ui.lp())
-
         val st = app.storage
-        val detected3ds = com.breezybuilds.cheatstation.emulator.EmulatorDetector.detect3dsEmulators(this)
-        val selected3ds = detected3ds.firstOrNull { it.packageName == st.selected3dsEmulatorPackage }
-        val threeDsStatus = when {
-            selected3ds == null -> "No emulator selected"
-            st.selected3dsRootUri() != null || st.autoDetect3dsFolder() != null -> "✓ Storage configured"
-            else -> "Emulator detected • storage needs setup"
-        }
-        card("3DS", "${selected3ds?.name ?: "No supported emulator selected"} • $threeDsStatus") { navigate(Page.THREE_DS) }
 
+        // 3DS station bay
+        val detected3ds =
+            com.breezybuilds.cheatstation.emulator.EmulatorDetector
+                .detect3dsEmulators(this)
+
+        val selected3ds =
+            detected3ds.firstOrNull {
+                it.packageName == st.selected3dsEmulatorPackage
+            }
+
+        val threeDsCard = Ui.statusPanel(
+            this,
+            "3DS",
+            st.threeDsStorageState().toStatus(),
+            selected3ds?.name
+        )
+
+        threeDsCard.setOnClickListener {
+            navigate(Page.THREE_DS)
+        }
+
+        content.addView(threeDsCard, Ui.lp())
+
+        // PlayStation 2 station bay
         val ps2 = app.ps2Storage.detectEmulator()
-        val ps2Status = when {
-            ps2 == null -> "No emulator detected"
-            app.ps2Storage.gamesUri != null -> "✓ Emulator detected • games folder configured"
-            else -> "Emulator detected • setup available"
-        }
-        card("PlayStation 2", "${ps2?.name ?: "No emulator detected"} • $ps2Status") { navigate(Page.PS2) }
 
+        val ps2Card = Ui.statusPanel(
+            this,
+            "PS2",
+            app.ps2Storage.ps2StorageState().toStatus(),
+            ps2?.name
+        )
+
+        ps2Card.setOnClickListener {
+            navigate(Page.PS2)
+        }
+
+        content.addView(
+            ps2Card,
+            Ui.lp().apply {
+                topMargin = Ui.dp(this@SettingsActivity, 8)
+            }
+        )
+
+        // Dolphin station bays
         val dolphin = app.dolphinStorage.detectDolphin()
-        val wiiStatus = if (app.dolphinStorage.wiiGamesUri != null) "✓ Games folder configured" else "Games folder not configured"
-        val gcStatus = if (app.dolphinStorage.gameCubeGamesUri != null) "✓ Games folder configured" else "Games folder not configured"
-        card("Wii", "${dolphin?.name ?: "Dolphin not detected"} • $wiiStatus") { navigate(Page.WII) }
-        card("GameCube", "${dolphin?.name ?: "Dolphin not detected"} • $gcStatus") { navigate(Page.GAMECUBE) }
+
+        val wiiState = when {
+            dolphin == null ->
+                com.breezybuilds.cheatstation.storage.StorageState.NOT_CONFIGURED
+
+            app.dolphinStorage.wiiGamesUri != null ->
+                com.breezybuilds.cheatstation.storage.StorageState.ACCESSIBLE
+
+            else ->
+                com.breezybuilds.cheatstation.storage.StorageState.DETECTED
+        }
+
+        val wiiStatus = com.breezybuilds.cheatstation.storage.StorageStatus(
+            state = wiiState,
+            title = when (wiiState) {
+                com.breezybuilds.cheatstation.storage.StorageState.ACCESSIBLE -> "READY"
+                com.breezybuilds.cheatstation.storage.StorageState.DETECTED -> "SETUP NEEDED"
+                else -> "NOT DETECTED"
+            },
+            detail = when (wiiState) {
+                com.breezybuilds.cheatstation.storage.StorageState.ACCESSIBLE ->
+                    "Dolphin detected and Wii games folder is connected."
+
+                com.breezybuilds.cheatstation.storage.StorageState.DETECTED ->
+                    "Dolphin detected; connect a Wii games folder."
+
+                else ->
+                    "Dolphin emulator was not detected."
+            }
+        )
+
+        val wiiCard = Ui.statusPanel(
+            this,
+            "WII",
+            wiiStatus,
+            dolphin?.name
+        )
+
+        wiiCard.setOnClickListener {
+            navigate(Page.WII)
+        }
+
+        content.addView(
+            wiiCard,
+            Ui.lp().apply {
+                topMargin = Ui.dp(this@SettingsActivity, 8)
+            }
+        )
+
+        val gameCubeState = when {
+            dolphin == null ->
+                com.breezybuilds.cheatstation.storage.StorageState.NOT_CONFIGURED
+
+            app.dolphinStorage.gameCubeGamesUri != null ->
+                com.breezybuilds.cheatstation.storage.StorageState.ACCESSIBLE
+
+            else ->
+                com.breezybuilds.cheatstation.storage.StorageState.DETECTED
+        }
+
+        val gameCubeStatus = com.breezybuilds.cheatstation.storage.StorageStatus(
+            state = gameCubeState,
+            title = when (gameCubeState) {
+                com.breezybuilds.cheatstation.storage.StorageState.ACCESSIBLE -> "READY"
+                com.breezybuilds.cheatstation.storage.StorageState.DETECTED -> "SETUP NEEDED"
+                else -> "NOT DETECTED"
+            },
+            detail = when (gameCubeState) {
+                com.breezybuilds.cheatstation.storage.StorageState.ACCESSIBLE ->
+                    "Dolphin detected and GameCube games folder is connected."
+
+                com.breezybuilds.cheatstation.storage.StorageState.DETECTED ->
+                    "Dolphin detected; connect a GameCube games folder."
+
+                else ->
+                    "Dolphin emulator was not detected."
+            }
+        )
+
+        val gameCubeCard = Ui.statusPanel(
+            this,
+            "GAMECUBE",
+            gameCubeStatus,
+            dolphin?.name
+        )
+
+        gameCubeCard.setOnClickListener {
+            navigate(Page.GAMECUBE)
+        }
+
+        content.addView(
+            gameCubeCard,
+            Ui.lp().apply {
+                topMargin = Ui.dp(this@SettingsActivity, 8)
+            }
+        )
     }
 
     private fun render3dsSettings() {

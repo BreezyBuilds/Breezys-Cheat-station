@@ -108,7 +108,7 @@ object Ui {
 
         val row = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(ctx, 14), dp(ctx, 12), dp(ctx, 14), dp(ctx, 12))
+            setPadding(dp(ctx, 16), dp(ctx, 16), dp(ctx, 16), dp(ctx, 16))
         }
 
         val header = LinearLayout(ctx).apply {
@@ -116,41 +116,61 @@ object Ui {
             gravity = android.view.Gravity.CENTER_VERTICAL
         }
 
-        val stateDot = tv(ctx, "●", 12f, bold = true).apply {
-            setTextColor(statusColor(ctx, status.state))
+        val identity = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+
+        identity.addView(
+            tv(ctx, system, 18f, bold = true, mono = true),
+            lp()
+        )
+
+        if (!emulator.isNullOrBlank()) {
+            identity.addView(
+                tv(ctx, emulator, 12f, secondary = true, mono = true).apply {
+                    setPadding(0, dp(ctx, 3), 0, 0)
+                },
+                lp()
+            )
         }
 
         header.addView(
-            stateDot,
-            lp(dp(ctx, 20), ViewGroup.LayoutParams.WRAP_CONTENT)
-        )
-
-        header.addView(
-            tv(ctx, status.title, 12f, bold = true, mono = true),
+            identity,
             lp(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         )
 
+        val statusBox = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+        }
+
+        val stateDot = tv(ctx, "●", 11f, bold = true).apply {
+            setTextColor(statusColor(ctx, status.state))
+        }
+
+        statusBox.addView(
+            stateDot,
+            lp(dp(ctx, 16), ViewGroup.LayoutParams.WRAP_CONTENT)
+        )
+
+        statusBox.addView(
+            tv(ctx, status.title, 11f, bold = true, mono = true),
+            lp()
+        )
+
         header.addView(
-            tv(ctx, system, 12f, bold = true, secondary = true, mono = true)
+            statusBox,
+            lp(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
         )
 
         row.addView(header, lp())
 
         row.addView(
             tv(ctx, status.detail, 13f, secondary = true).apply {
-                setPadding(0, dp(ctx, 5), 0, 0)
+                setPadding(0, dp(ctx, 9), 0, 0)
             },
             lp()
         )
-
-        if (!emulator.isNullOrBlank()) {
-            row.addView(
-                tv(ctx, emulator, 12f, secondary = true, mono = true).apply {
-                    setPadding(0, dp(ctx, 6), 0, 0)
-                },
-                lp()
-            )
-        }
 
         addView(row, lp())
     }
@@ -158,16 +178,18 @@ object Ui {
     private fun statusColor(ctx: Context, state: StorageState): Int =
         when (state) {
             StorageState.ACCESSIBLE ->
-                attrColor(ctx, android.R.attr.colorAccent)
+                ContextCompat.getColor(ctx, android.R.color.holo_green_light)
 
-            StorageState.DETECTED ->
-                attrColor(ctx, android.R.attr.textColorSecondary)
-
-            StorageState.NOT_CONFIGURED,
+            StorageState.DETECTED,
             StorageState.PERMISSION_REQUIRED,
-            StorageState.TRANSFER_ONLY,
-            StorageState.INVALID ->
+            StorageState.TRANSFER_ONLY ->
+                ContextCompat.getColor(ctx, android.R.color.holo_orange_light)
+
+            StorageState.NOT_CONFIGURED ->
                 attrColor(ctx, android.R.attr.textColorSecondary)
+
+            StorageState.INVALID ->
+                ContextCompat.getColor(ctx, android.R.color.holo_red_light)
         }
 
     fun banner(ctx: Context): TextView = TextView(ctx).apply {
