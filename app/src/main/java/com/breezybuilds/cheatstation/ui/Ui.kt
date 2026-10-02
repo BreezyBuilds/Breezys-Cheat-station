@@ -11,6 +11,9 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.card.MaterialCardView
+import com.breezybuilds.cheatstation.storage.StorageStatus
+import com.breezybuilds.cheatstation.storage.StorageState
 
 /** Tiny helpers so the screens can be built in code (no layout XML needed). */
 object Ui {
@@ -50,6 +53,122 @@ object Ui {
             insetBottom = 0
         }
 
+
+    /** Consistent navigation card used by the Settings hub and system pages. */
+    fun settingsCard(
+        ctx: Context,
+        title: String,
+        subtitle: String,
+        onClick: () -> Unit
+    ): MaterialCardView = MaterialCardView(ctx).apply {
+        isClickable = true
+        isFocusable = true
+        radius = dp(ctx, 14).toFloat()
+        strokeWidth = dp(ctx, 1)
+        setOnClickListener { onClick() }
+
+        val row = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            setPadding(dp(ctx, 16), dp(ctx, 14), dp(ctx, 12), dp(ctx, 14))
+        }
+
+        val textBox = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        textBox.addView(tv(ctx, title, 16f, bold = true), lp(weight = 1f))
+        textBox.addView(tv(ctx, subtitle, 13f, secondary = true).apply {
+            setPadding(0, dp(ctx, 3), 0, 0)
+        }, lp())
+
+        row.addView(textBox, lp(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        row.addView(tv(ctx, "›", 28f, secondary = true).apply {
+            gravity = android.view.Gravity.CENTER
+        }, lp(dp(ctx, 32), ViewGroup.LayoutParams.WRAP_CONTENT))
+        addView(row, lp())
+    }
+
+
+    /** Compact Station-style status panel used by system settings. */
+    fun statusPanel(
+        ctx: Context,
+        system: String,
+        status: StorageStatus,
+        emulator: String? = null
+    ): MaterialCardView = MaterialCardView(ctx).apply {
+        radius = dp(ctx, 14).toFloat()
+        strokeWidth = dp(ctx, 1)
+        setCardBackgroundColor(
+            attrColor(ctx, com.google.android.material.R.attr.colorSurface)
+        )
+        strokeColor = attrColor(
+            ctx,
+            com.google.android.material.R.attr.colorOutline
+        )
+
+        val row = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(ctx, 14), dp(ctx, 12), dp(ctx, 14), dp(ctx, 12))
+        }
+
+        val header = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+        }
+
+        val stateDot = tv(ctx, "●", 12f, bold = true).apply {
+            setTextColor(statusColor(ctx, status.state))
+        }
+
+        header.addView(
+            stateDot,
+            lp(dp(ctx, 20), ViewGroup.LayoutParams.WRAP_CONTENT)
+        )
+
+        header.addView(
+            tv(ctx, status.title, 12f, bold = true, mono = true),
+            lp(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        )
+
+        header.addView(
+            tv(ctx, system, 12f, bold = true, secondary = true, mono = true)
+        )
+
+        row.addView(header, lp())
+
+        row.addView(
+            tv(ctx, status.detail, 13f, secondary = true).apply {
+                setPadding(0, dp(ctx, 5), 0, 0)
+            },
+            lp()
+        )
+
+        if (!emulator.isNullOrBlank()) {
+            row.addView(
+                tv(ctx, emulator, 12f, secondary = true, mono = true).apply {
+                    setPadding(0, dp(ctx, 6), 0, 0)
+                },
+                lp()
+            )
+        }
+
+        addView(row, lp())
+    }
+
+    private fun statusColor(ctx: Context, state: StorageState): Int =
+        when (state) {
+            StorageState.ACCESSIBLE ->
+                attrColor(ctx, android.R.attr.colorAccent)
+
+            StorageState.DETECTED ->
+                attrColor(ctx, android.R.attr.textColorSecondary)
+
+            StorageState.NOT_CONFIGURED,
+            StorageState.PERMISSION_REQUIRED,
+            StorageState.TRANSFER_ONLY,
+            StorageState.INVALID ->
+                attrColor(ctx, android.R.attr.textColorSecondary)
+        }
 
     fun banner(ctx: Context): TextView = TextView(ctx).apply {
         setPadding(dp(ctx, 14), dp(ctx, 10), dp(ctx, 14), dp(ctx, 10))
