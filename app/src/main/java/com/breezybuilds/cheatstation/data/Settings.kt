@@ -13,6 +13,9 @@ class Settings(ctx: Context) {
     var debugLog: Boolean
         get() = p.getBoolean("debug_log", false)
         set(v) = p.edit { putBoolean("debug_log", v) }
+    var showTechnicalGameDetails: Boolean
+        get() = p.getBoolean("show_technical_game_details", false)
+        set(v) = p.edit { putBoolean("show_technical_game_details", v) }
     var lastAutoCheck: Long
         get() = p.getLong("last_auto_check", 0L)
         set(v) = p.edit { putLong("last_auto_check", v) }

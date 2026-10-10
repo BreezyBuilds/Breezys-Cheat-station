@@ -30,7 +30,6 @@ class ThreeDsPageFragment : Fragment() {
     private lateinit var progress: LinearProgressIndicator
     private var searchQuery = ""
     private lateinit var empty: TextView
-    private lateinit var dashboard: TextView
     private lateinit var adapter: GameAdapter
 
     private var scanned: List<Game> = emptyList()
@@ -63,24 +62,14 @@ class ThreeDsPageFragment : Fragment() {
             banner.visibility = View.GONE
         }
         content.addView(banner, Ui.lp())
-        dashboard = Ui.tv(ctx, "0 games found", 13f, secondary = true)
-        content.addView(
-            dashboard,
-            Ui.lp().apply {
-                setMargins(
-                    Ui.dp(ctx, 12),
-                    Ui.dp(ctx, 8),
-                    Ui.dp(ctx, 12),
-                    Ui.dp(ctx, 4)
-                )
-            }
-        )
 
         adapter = GameAdapter(
             ::describe,
             ::openGame,
             ::onLongPress
-        )
+        ).apply {
+            setShowTechnicalDetails(app.settings.showTechnicalGameDetails)
+        }
 
         val list = RecyclerView(ctx).apply {
             layoutManager = LinearLayoutManager(ctx)
@@ -142,6 +131,8 @@ class ThreeDsPageFragment : Fragment() {
         super.onResume()
 
         if (!::adapter.isInitialized) return
+
+        adapter.setShowTechnicalDetails(app.settings.showTechnicalGameDetails)
 
         if (app.storage.has3dsStorage()) {
             loadCounts()
@@ -245,7 +236,6 @@ class ThreeDsPageFragment : Fragment() {
             .sortedBy { it.title.lowercase() }
 
         applyFilter()
-        refreshDashboard()
 
         empty.visibility =
             if (all.isEmpty()) View.VISIBLE else View.GONE
@@ -328,18 +318,10 @@ class ThreeDsPageFragment : Fragment() {
             availableCounts.putAll(avail)
 
             adapter.notifyDataSetChanged()
-            refreshDashboard()
         }
     }
 
-    private fun refreshDashboard() {
-        if (!::dashboard.isInitialized) return
-
-        val total = all.size
-        dashboard.text = "$total games found"
-    }
-
-    private fun describe(g: Game): List<String> {
+    private fun describe(g: Game, showTechnicalDetails: Boolean): List<String> {
         val line2 = buildString {
             append(g.region ?: "Region unknown")
             append("  •  Version: ${g.version ?: "unverified"}")
@@ -372,6 +354,15 @@ class ThreeDsPageFragment : Fragment() {
                 else ->
                     "Tap to manage cheats"
             }
+
+        if (!showTechnicalDetails) {
+            val conciseStatus = when {
+                avail.contains("No cheats") -> "No cheats listed"
+                avail.contains("available") -> avail
+                else -> "Tap to check cheats"
+            }
+            return listOf(g.title, conciseStatus)
+        }
 
         return listOf(
             g.title,

@@ -8,7 +8,6 @@ import android.content.Context
 import android.net.Uri
 import android.os.Bundle
 import android.text.InputType
-import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.ScrollView
@@ -26,6 +25,7 @@ import com.breezybuilds.cheatstation.data.DatabaseUpdater
 import com.breezybuilds.cheatstation.provider.CheatSourceConfig
 import com.breezybuilds.cheatstation.provider.RecommendedCheatSources
 import com.breezybuilds.cheatstation.storage.StorageManager
+import com.breezybuilds.cheatstation.storage.toStatus
 import com.breezybuilds.cheatstation.storage.DolphinStorage
 import com.breezybuilds.cheatstation.util.AppLog
 import kotlinx.coroutines.Dispatchers
@@ -35,6 +35,13 @@ import kotlinx.coroutines.withContext
 class SettingsActivity : AppCompatActivity() {
     private lateinit var content: android.widget.LinearLayout
     private lateinit var banner: TextView
+    private lateinit var toolbar: MaterialToolbar
+
+    private enum class Page {
+        HOME, SYSTEMS, THREE_DS, PS2, WII, GAMECUBE, CHEATS, BACKUPS, ADVANCED, ABOUT
+    }
+
+    private var page = Page.HOME
 
     private val pickRoot = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { u -> if (u != null) accept(StorageManager.Slot.ROOT, u) }
     private val pickCheats = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { u -> if (u != null) accept(StorageManager.Slot.CHEATS, u) }
@@ -49,27 +56,98 @@ class SettingsActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val ctx = this
-        val root = Ui.vbox(ctx)
+        val root = Ui.vbox(ctx).apply { setBackgroundColor(0xFF0A111E.toInt()) }
         Ui.edgeToEdge(root)
-        root.addView(MaterialToolbar(ctx).apply { title = "Settings" }, Ui.lp())
+
+        toolbar = MaterialToolbar(ctx).apply {
+            title = "Settings"
+            setNavigationOnClickListener { goBack() }
+        }
+        root.addView(toolbar, Ui.lp())
+
         banner = Ui.banner(ctx)
         root.addView(banner, Ui.lp())
-        content = Ui.vbox(ctx, 16)
-        root.addView(ScrollView(ctx).apply { addView(content) }, Ui.lp(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+
+        content = Ui.vbox(ctx, 8).apply {
+            setPadding(
+                Ui.dp(ctx, 12),
+                Ui.dp(ctx, 8),
+                Ui.dp(ctx, 12),
+                Ui.dp(ctx, 24)
+            )
+            clipToPadding = false
+        }
+        root.addView(
+            ScrollView(ctx).apply {
+                addView(content)
+                isFillViewport = true
+            },
+            Ui.lp(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
+        )
+
         setContentView(root)
         render()
+
+        onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() = goBack()
+        })
+
         when (intent.getStringExtra("open_section")) {
-            "source" -> window.decorView.post { chooseRecommendedSource() }
+            "source" -> {
+                page = Page.CHEATS
+                window.decorView.post {
+                    render()
+                    chooseRecommendedSource()
+                }
+            }
         }
     }
 
-    private fun section(title: String) {
-        content.addView(Ui.tv(this, title, 13f, bold = true).apply { setTextColor(0xFFE5533D.toInt()) }, Ui.lp().apply { topMargin = Ui.dp(this@SettingsActivity, 22) })
+    private fun navigate(target: Page) {
+        page = target
+        render()
     }
+
+    private fun goBack() {
+        page = when (page) {
+            Page.HOME -> { finish(); return }
+            Page.SYSTEMS, Page.CHEATS, Page.BACKUPS, Page.ADVANCED, Page.ABOUT -> Page.HOME
+            Page.THREE_DS, Page.PS2, Page.WII, Page.GAMECUBE -> Page.SYSTEMS
+        }
+        render()
+    }
+
+    private fun pageTitle(): String = when (page) {
+        Page.HOME -> "Settings"
+        Page.SYSTEMS -> "Systems"
+        Page.THREE_DS -> "3DS"
+        Page.PS2 -> "PlayStation 2"
+        Page.WII -> "Wii"
+        Page.GAMECUBE -> "GameCube"
+        Page.CHEATS -> "Cheats & Sources"
+        Page.BACKUPS -> "Backups"
+        Page.ADVANCED -> "Advanced"
+        Page.ABOUT -> "About"
+    }
+
     private fun line(text: String, secondary: Boolean = false) =
-        content.addView(Ui.tv(this, text, 14f, secondary = secondary), Ui.lp().apply { topMargin = Ui.dp(this@SettingsActivity, 4) })
+        content.addView(
+            Ui.tv(this, text, if (secondary) 13f else 14f, secondary = secondary).apply {
+                setPadding(
+                    Ui.dp(this@SettingsActivity, 2),
+                    Ui.dp(this@SettingsActivity, 2),
+                    Ui.dp(this@SettingsActivity, 2),
+                    Ui.dp(this@SettingsActivity, 2)
+                )
+            },
+            Ui.lp().apply { topMargin = Ui.dp(this@SettingsActivity, 3) }
+        )
+
     private fun btn(label: String, filled: Boolean = false, onClick: () -> Unit) =
-        content.addView(Ui.button(this, label, filled, onClick), Ui.lp().apply { topMargin = Ui.dp(this@SettingsActivity, 6) })
+        content.addView(
+            Ui.button(this, label, filled, onClick),
+            Ui.lp().apply { topMargin = Ui.dp(this@SettingsActivity, 5) }
+        )
 
     private fun chooseDolphinRepositories() {
         val settings = (application as App).dolphinSettings
@@ -247,12 +325,63 @@ class SettingsActivity : AppCompatActivity() {
         pickRoot.launch(st.pickerHint())
     }
 
+    private fun card(title: String, subtitle: String, onClick: () -> Unit) {
+        content.addView(
+            Ui.settingsCard(this, title, subtitle, onClick),
+            Ui.lp().apply { topMargin = Ui.dp(this@SettingsActivity, 5) }
+        )
+    }
+
+    private fun subsection(title: String) {
+        content.addView(
+            Ui.tv(this, title, 11f, bold = true).apply {
+                letterSpacing = 0.08f
+                setPadding(
+                    Ui.dp(this@SettingsActivity, 2),
+                    Ui.dp(this@SettingsActivity, 14),
+                    0,
+                    Ui.dp(this@SettingsActivity, 3)
+                )
+            },
+            Ui.lp()
+        )
+    }
+
     private fun render() {
         content.removeAllViews()
-        val st = app.storage
-        val src = app.settings.source()
+        toolbar.title = pageTitle()
+        toolbar.navigationIcon = if (page == Page.HOME) null else androidx.appcompat.content.res.AppCompatResources.getDrawable(this, androidx.appcompat.R.drawable.abc_ic_ab_back_material)
 
-        section("3DS EMULATOR STORAGE")
+        when (page) {
+            Page.HOME -> renderHome()
+            Page.SYSTEMS -> renderSystems()
+            Page.THREE_DS -> render3dsSettings()
+            Page.PS2 -> renderPs2Settings()
+            Page.WII -> renderDolphinSystemSettings(DolphinSystem.WII)
+            Page.GAMECUBE -> renderDolphinSystemSettings(DolphinSystem.GAMECUBE)
+            Page.CHEATS -> renderCheatSettings()
+            Page.BACKUPS -> renderBackupSettings()
+            Page.ADVANCED -> renderAdvancedSettings()
+            Page.ABOUT -> renderAbout()
+        }
+    }
+
+    private fun renderHome() {
+        content.addView(Ui.tv(this, "Emulators, cheats and app preferences", 13f, secondary = true), Ui.lp())
+        subsection("SYSTEMS")
+        card("Systems", "Emulators, game folders and system-specific storage") { navigate(Page.SYSTEMS) }
+
+        subsection("APP")
+        card("Cheats & Sources", "Cheat source, database and Dolphin repositories") { navigate(Page.CHEATS) }
+        card("Backups", "Manage automatic cheat backups") { navigate(Page.BACKUPS) }
+        card("Advanced", "Updates, debugging and diagnostics") { navigate(Page.ADVANCED) }
+        card("About", "Version and application information") { navigate(Page.ABOUT) }
+    }
+
+    private fun renderSystems() {
+        val st = app.storage
+
+        // 3DS station bay
         val detected3ds =
             com.breezybuilds.cheatstation.emulator.EmulatorDetector
                 .detect3dsEmulators(this)
@@ -262,112 +391,316 @@ class SettingsActivity : AppCompatActivity() {
                 it.packageName == st.selected3dsEmulatorPackage
             }
 
-        line(
-            "Emulator: " +
-                (selected3ds?.name ?: "Not selected"),
-            true
+        val threeDsCard = Ui.statusPanel(
+            this,
+            "3DS",
+            st.threeDsStorageState().toStatus(),
+            selected3ds?.name
         )
 
-        if (selected3ds != null) {
-            line(
-                "Package: ${selected3ds.packageName}",
-                true
-            )
+        threeDsCard.setOnClickListener {
+            navigate(Page.THREE_DS)
         }
 
-        line("Emulator data folder: " + st.describe3dsRoot())
-        line("Cheats folder: " + if (st.cheatsUri != null) st.describe(st.cheatsUri) else "automatic (<data folder>/cheats)", true)
-        line("Games folder: " + st.describe(st.gamesUri), true)
+        content.addView(threeDsCard, Ui.lp())
 
-        btn("Choose 3DS emulator…", true) {
-            choose3dsEmulator()
+        // PlayStation 2 station bay
+        val ps2 = app.ps2Storage.detectEmulator()
+
+        val ps2Card = Ui.statusPanel(
+            this,
+            "PS2",
+            app.ps2Storage.ps2StorageState().toStatus(),
+            ps2?.name
+        )
+
+        ps2Card.setOnClickListener {
+            navigate(Page.PS2)
         }
 
-        btn("🔍 Auto-detect 3DS emulator", true) {
-            autoDetect3ds()
+        content.addView(
+            ps2Card,
+            Ui.lp().apply {
+                topMargin = Ui.dp(this@SettingsActivity, 6)
+            }
+        )
+
+        // Dolphin station bays
+        val dolphin = app.dolphinStorage.detectDolphin()
+
+        val wiiState = when {
+            dolphin == null ->
+                com.breezybuilds.cheatstation.storage.StorageState.NOT_CONFIGURED
+
+            app.dolphinStorage.wiiGamesUri != null ->
+                com.breezybuilds.cheatstation.storage.StorageState.ACCESSIBLE
+
+            else ->
+                com.breezybuilds.cheatstation.storage.StorageState.DETECTED
         }
-        btn("Change emulator data folder", true) { pickRoot.launch(st.pickerHint()) }
-        if (selected3ds != null && st.selected3dsRootUri() != null) {
-            btn("Forget emulator data folder") {
-                st.selected3dsEmulatorPackage?.let { st.clearEmulatorRoot(it) }
+
+        val wiiStatus = com.breezybuilds.cheatstation.storage.StorageStatus(
+            state = wiiState,
+            title = when (wiiState) {
+                com.breezybuilds.cheatstation.storage.StorageState.ACCESSIBLE -> "READY"
+                com.breezybuilds.cheatstation.storage.StorageState.DETECTED -> "SETUP NEEDED"
+                else -> "NOT DETECTED"
+            },
+            detail = when (wiiState) {
+                com.breezybuilds.cheatstation.storage.StorageState.ACCESSIBLE ->
+                    "Dolphin detected and Wii games folder is connected."
+
+                com.breezybuilds.cheatstation.storage.StorageState.DETECTED ->
+                    "Dolphin detected; connect a Wii games folder."
+
+                else ->
+                    "Dolphin emulator was not detected."
+            }
+        )
+
+        val wiiCard = Ui.statusPanel(
+            this,
+            "WII",
+            wiiStatus,
+            dolphin?.name
+        )
+
+        wiiCard.setOnClickListener {
+            navigate(Page.WII)
+        }
+
+        content.addView(
+            wiiCard,
+            Ui.lp().apply {
+                topMargin = Ui.dp(this@SettingsActivity, 6)
+            }
+        )
+
+        val gameCubeState = when {
+            dolphin == null ->
+                com.breezybuilds.cheatstation.storage.StorageState.NOT_CONFIGURED
+
+            app.dolphinStorage.gameCubeGamesUri != null ->
+                com.breezybuilds.cheatstation.storage.StorageState.ACCESSIBLE
+
+            else ->
+                com.breezybuilds.cheatstation.storage.StorageState.DETECTED
+        }
+
+        val gameCubeStatus = com.breezybuilds.cheatstation.storage.StorageStatus(
+            state = gameCubeState,
+            title = when (gameCubeState) {
+                com.breezybuilds.cheatstation.storage.StorageState.ACCESSIBLE -> "READY"
+                com.breezybuilds.cheatstation.storage.StorageState.DETECTED -> "SETUP NEEDED"
+                else -> "NOT DETECTED"
+            },
+            detail = when (gameCubeState) {
+                com.breezybuilds.cheatstation.storage.StorageState.ACCESSIBLE ->
+                    "Dolphin detected and GameCube games folder is connected."
+
+                com.breezybuilds.cheatstation.storage.StorageState.DETECTED ->
+                    "Dolphin detected; connect a GameCube games folder."
+
+                else ->
+                    "Dolphin emulator was not detected."
+            }
+        )
+
+        val gameCubeCard = Ui.statusPanel(
+            this,
+            "GAMECUBE",
+            gameCubeStatus,
+            dolphin?.name
+        )
+
+        gameCubeCard.setOnClickListener {
+            navigate(Page.GAMECUBE)
+        }
+
+        content.addView(
+            gameCubeCard,
+            Ui.lp().apply {
+                topMargin = Ui.dp(this@SettingsActivity, 6)
+            }
+        )
+    }
+
+    /** Shared navigation and management rows across every supported platform. */
+    private fun settingRow(title: String, value: String, onClick: () -> Unit) =
+        card(title, value, onClick)
+
+    private fun manage(title: String, vararg options: Pair<String, () -> Unit>) {
+        val names = options.map { it.first }.toTypedArray()
+        MaterialAlertDialogBuilder(this)
+            .setTitle(title)
+            .setItems(names) { _, index -> options[index].second() }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun confirmSharedDolphinReset() {
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Forget shared Dolphin folder?")
+            .setMessage("This folder is shared by Wii and GameCube. Both systems may lose cheat storage access until you configure it again. Existing cheat files will not be deleted.")
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Forget folder") { _, _ ->
+                app.dolphinStorage.clearDolphinUser()
                 render()
             }
-        }
-        btn("Select a different cheats folder…") { pickCheats.launch(st.rootUri) }
-        btn("Select a games folder (CIA/3DS/CXI)…") { pickGames.launch(null) }
-        if (st.cheatsUri != null) btn("Use automatic cheats folder") { st.clear(StorageManager.Slot.CHEATS); render() }
-        if (st.gamesUri != null) btn("Forget games folder") { st.clear(StorageManager.Slot.GAMES); render() }
+            .show()
+    }
 
-        section("PLAYSTATION 2 STORAGE")
+    private fun systemHeader(name: String, emulator: String?, status: com.breezybuilds.cheatstation.storage.StorageStatus) {
+        content.addView(Ui.statusPanel(this, name, status, emulator), Ui.lp())
+    }
+
+    private fun render3dsSettings() {
+        val st = app.storage
+        val detected = com.breezybuilds.cheatstation.emulator.EmulatorDetector.detect3dsEmulators(this)
+        val selected = detected.firstOrNull { it.packageName == st.selected3dsEmulatorPackage }
+        systemHeader("3DS", selected?.name, st.threeDsStorageState().toStatus())
+        subsection("EMULATOR")
+        settingRow("Emulator", selected?.name ?: "Not selected") { choose3dsEmulator() }
+        subsection("STORAGE")
+        settingRow("Emulator data folder", st.describe3dsRoot()) {
+            val actions = mutableListOf<Pair<String, () -> Unit>>(
+                "Auto-detect emulator" to { autoDetect3ds() },
+                "Change data folder" to { pickRoot.launch(st.pickerHint()) }
+            )
+            if (selected != null && st.selected3dsRootUri() != null) {
+                actions.add("Forget data folder" to {
+                    st.selected3dsEmulatorPackage?.let { st.clearEmulatorRoot(it) }
+                    render()
+                })
+            }
+            manage("Emulator data folder", *actions.toTypedArray())
+        }
+        settingRow("Games folder", st.describe(st.gamesUri)) {
+            val actions = mutableListOf<Pair<String, () -> Unit>>(
+                "Select games folder" to { pickGames.launch(null) }
+            )
+            if (st.gamesUri != null) actions.add("Forget games folder" to {
+                st.clear(StorageManager.Slot.GAMES)
+                render()
+            })
+            manage("Games folder", *actions.toTypedArray())
+        }
+        settingRow("Cheats folder", st.cheatsUri?.let { st.describe(it) } ?: "Automatic (data folder/cheats)") {
+            val actions = mutableListOf<Pair<String, () -> Unit>>(
+                "Select cheats folder" to { pickCheats.launch(st.rootUri) }
+            )
+            if (st.cheatsUri != null) actions.add("Use automatic cheats folder" to {
+                st.clear(StorageManager.Slot.CHEATS)
+                render()
+            })
+            manage("Cheats folder", *actions.toTypedArray())
+        }
+        subsection("ADVANCED")
+        settingRow("Additional options", "Detection and emulator selection") {
+            manage("3DS advanced options",
+                "Auto-detect 3DS emulator" to { autoDetect3ds() },
+                "Choose a different emulator" to { choose3dsEmulator() })
+        }
+    }
+
+    private fun renderPs2Settings() {
         val ps2 = app.ps2Storage
         val detected = ps2.detectEmulator()
-        line("Emulator: " + (detected?.name ?: "Not detected"))
-        line("Emulator data: " + (ps2.manualPath ?: detected?.path ?: "Not configured"), true)
-        line("Games folder: " + (ps2.gamesUri?.let { ps2.describe(it) } ?: "Not configured"), true)
-        line("Transfer folder: " + (ps2.transferUri?.let { ps2.describe(it) } ?: "Not configured"), true)
-        btn("Auto-detect NetherSX2", true) { render() }
-        btn("Select emulator data folder") { pickPs2Root.launch(null) }
-        btn("Set emulator path manually") { ps2ManualPathDialog() }
-        btn("Select PS2 games folder") { pickPs2Games.launch(null) }
-        btn("Select transfer folder") { pickPs2Transfer.launch(null) }
-        section("DOLPHIN — WII / GAMECUBE")
+        systemHeader("PS2", detected?.name, ps2.ps2StorageState().toStatus())
+        subsection("EMULATOR")
+        settingRow("Emulator", detected?.name ?: "Not detected") {
+            manage("PS2 emulator", "Auto-detect emulator" to { render() },
+                "Select emulator data folder" to { pickPs2Root.launch(null) },
+                "Set emulator path manually" to { ps2ManualPathDialog() })
+        }
+        subsection("STORAGE")
+        settingRow("Emulator data path", ps2.manualPath ?: detected?.path ?: "Not configured") {
+            manage("Emulator data path",
+                "Select emulator data folder" to { pickPs2Root.launch(null) },
+                "Set emulator path manually" to { ps2ManualPathDialog() })
+        }
+        settingRow("Games folder", ps2.gamesUri?.let { ps2.describe(it) } ?: "Not configured") {
+            pickPs2Games.launch(null)
+        }
+        settingRow("Transfer folder", ps2.transferUri?.let { ps2.describe(it) } ?: "Not configured") {
+            pickPs2Transfer.launch(null)
+        }
+        subsection("ADVANCED")
+        settingRow("Additional options", "Emulator detection and paths") {
+            manage("PS2 advanced options",
+                "Auto-detect emulator" to { render() },
+                "Select emulator data folder" to { pickPs2Root.launch(null) },
+                "Set emulator path manually" to { ps2ManualPathDialog() })
+        }
+    }
+
+    private enum class DolphinSystem { WII, GAMECUBE }
+
+    private fun renderDolphinSystemSettings(system: DolphinSystem) {
         val dolphin = app.dolphinStorage
-        val detectedDolphin = dolphin.detectDolphin()
-
-        line("Emulator: " + (detectedDolphin?.name ?: "Not detected"))
-
-        val accessText = when {
-            dolphin.directGameSettingsStore() != null -> "✓ Automatic access available"
-            dolphin.dolphinUserDoc() != null -> "✓ Folder access configured"
-            detectedDolphin != null -> "⚠ Android is restricting Dolphin's Android/data folder"
+        val detected = dolphin.detectDolphin()
+        val gamesUri = if (system == DolphinSystem.WII) dolphin.wiiGamesUri else dolphin.gameCubeGamesUri
+        val name = if (system == DolphinSystem.WII) "Wii" else "GameCube"
+        val access = when {
+            dolphin.directGameSettingsStore() != null -> "Automatic access available"
+            dolphin.dolphinUserDoc() != null -> "Folder access configured"
+            detected != null -> "Android/data access restricted"
             else -> "Not configured"
         }
-
-        line("Cheat storage: $accessText", true)
-
-        if (detectedDolphin != null) {
-            line("Detected data folder: ${detectedDolphin.path}", true)
+        systemHeader(name, detected?.name, (when {
+            dolphin.directGameSettingsStore() != null || dolphin.dolphinUserDoc() != null -> com.breezybuilds.cheatstation.storage.StorageState.ACCESSIBLE
+            detected != null -> com.breezybuilds.cheatstation.storage.StorageState.PERMISSION_REQUIRED
+            else -> com.breezybuilds.cheatstation.storage.StorageState.NOT_CONFIGURED
+        }).toStatus())
+        subsection("EMULATOR")
+        settingRow("Emulator", detected?.name ?: "Dolphin not detected") {
+            manage("Dolphin emulator", "Configure cheat storage" to { pickDolphinUser.launch(dolphin.dolphinUserUri) })
         }
-
-        section("DOLPHIN CHEAT REPOSITORIES")
-        line("Enabled repositories: ${app.dolphinSettings.sources().size}", true)
-        btn("Choose cheat repositories…", true) { chooseDolphinRepositories() }
-        btn("Add GitHub repository…") { addDolphinRepository() }
-
-        btn("Configure Dolphin cheat storage", true) {
-            pickDolphinUser.launch(dolphin.dolphinUserUri)
-        }
-
-        if (dolphin.dolphinUserUri != null) {
-            btn("Forget Dolphin folder") {
-                dolphin.clearDolphinUser()
-                render()
+        subsection("STORAGE")
+        settingRow("Games folder", dolphin.describe(gamesUri)) {
+            val choose: () -> Unit = {
+                if (system == DolphinSystem.WII) pickWiiGames.launch(gamesUri)
+                else pickGameCubeGames.launch(gamesUri)
             }
+            val actions = mutableListOf<Pair<String, () -> Unit>>("Select games folder" to choose)
+            if (gamesUri != null) actions.add("Forget games folder" to {
+                if (system == DolphinSystem.WII) dolphin.clearWiiGames()
+                else dolphin.clearGameCubeGames()
+                render()
+            })
+            manage("$name games folder", *actions.toTypedArray())
         }
-
-        line("Wii games folder: " + dolphin.describe(dolphin.wiiGamesUri), true)
-        btn("Select Wii games folder") { pickWiiGames.launch(dolphin.wiiGamesUri) }
-        if (dolphin.wiiGamesUri != null) btn("Forget Wii games folder") {
-            dolphin.clearWiiGames()
-            render()
+        settingRow("Cheat storage", access) {
+            val actions = mutableListOf<Pair<String, () -> Unit>>(
+                "Configure Dolphin cheat storage" to { pickDolphinUser.launch(dolphin.dolphinUserUri) }
+            )
+            if (dolphin.dolphinUserUri != null) actions.add("Forget shared Dolphin folder" to {
+                confirmSharedDolphinReset()
+            })
+            manage("Dolphin cheat storage", *actions.toTypedArray())
         }
-
-        line("GameCube games folder: " + dolphin.describe(dolphin.gameCubeGamesUri), true)
-        btn("Select GameCube games folder") { pickGameCubeGames.launch(dolphin.gameCubeGamesUri) }
-        if (dolphin.gameCubeGamesUri != null) btn("Forget GameCube games folder") {
-            dolphin.clearGameCubeGames()
-            render()
+        subsection("ADVANCED")
+        settingRow("Additional options", "Dolphin storage access") {
+            val actions = mutableListOf<Pair<String, () -> Unit>>(
+                "Configure Dolphin cheat storage" to { pickDolphinUser.launch(dolphin.dolphinUserUri) }
+            )
+            if (dolphin.dolphinUserUri != null) actions.add("Forget shared Dolphin folder" to {
+                confirmSharedDolphinReset()
+            })
+            manage("$name advanced options", *actions.toTypedArray())
         }
+    }
 
-        section("CHEAT SOURCE")
-        line("Current source: ${src.displayName}", false)
-        line("Branch ${src.branch}, folder \"${src.basePath}\", files ${src.fileNamePattern}", true)
-        line("Recommended sources are built in. FlagBrew / Sharkive is selected by default.", true)
-        btn("Browse recommended sources…", true) { chooseRecommendedSource() }
-        btn("Edit custom GitHub source…") { editSource() }
+    private fun renderCheatSettings() {
+        val src = app.settings.source()
+        subsection("3DS / GENERAL CHEAT SOURCE")
+        card("Current source", src.displayName, ::chooseRecommendedSource)
+        line("${src.branch} • ${src.basePath} • ${src.fileNamePattern}", true)
+        btn("Browse recommended sources", true) { chooseRecommendedSource() }
+        btn("Edit custom GitHub source") { editSource() }
         btn("Use default Sharkive source") { app.settings.resetSource(); render(); note(Ui.Kind.OK, "Sharkive is now the active cheat source.") }
 
-        section("CHEAT DATABASE")
+        subsection("CHEAT DATABASE")
         line("Cached cheat data: ${app.cache.cheatDataSize() / 1024} KB", true)
         btn("Refresh cheat database now", true) { refreshNow() }
         btn("Clear cached cheat data") {
@@ -376,27 +709,49 @@ class SettingsActivity : AppCompatActivity() {
                 .setPositiveButton("Clear") { _, _ -> val n = app.cache.clearCheatData(); render(); note(Ui.Kind.OK, "Cleared ${n / 1024} KB of cached data.") }
                 .setNegativeButton("Cancel", null).show()
         }
+        subsection("DOLPHIN CHEAT REPOSITORIES")
+        line("Enabled repositories: ${app.dolphinSettings.sources().size}", true)
+        btn("Choose cheat repositories", true) { chooseDolphinRepositories() }
+        btn("Add GitHub repository") { addDolphinRepository() }
+    }
+
+    private fun renderBackupSettings() {
+        subsection("BACKUP & RESTORE")
+        line("A backup is created automatically before any cheat file is changed. Backups are stored inside the configured cheats folder.", true)
+        btn("Manage backups", true) { manageBackups() }
+    }
+
+    private fun renderAdvancedSettings() {
+        subsection("UPDATES")
         content.addView(MaterialSwitch(this).apply {
             text = "Automatically check for cheat updates"
             isChecked = app.settings.autoUpdate
             setOnCheckedChangeListener { _, on -> app.settings.autoUpdate = on }
-        }, Ui.lp().apply { topMargin = Ui.dp(this@SettingsActivity, 8) })
+        }, Ui.lp())
 
-        section("BACKUPS")
-        line("A backup is created automatically before any cheat file is changed. They are stored in the \"backups\" folder inside your cheats folder.", true)
-        btn("Manage backups…") { manageBackups() }
+        subsection("GAME LIST")
+        content.addView(MaterialSwitch(this).apply {
+            text = "Show technical game details"
+            isChecked = app.settings.showTechnicalGameDetails
+            setOnCheckedChangeListener { _, on ->
+                app.settings.showTechnicalGameDetails = on
+            }
+        }, Ui.lp())
 
-        section("DEBUGGING")
+        subsection("DEBUGGING")
         content.addView(MaterialSwitch(this).apply {
             text = "Verbose debug log"
             isChecked = app.settings.debugLog
             setOnCheckedChangeListener { _, on -> app.settings.debugLog = on; AppLog.verbose = on }
         }, Ui.lp())
         btn("View debug log") { viewLog() }
+    }
 
-        section("ABOUT")
-        line("Breezy's Cheat Station ${BuildConfigVersion.name(this)}")
-        line("A companion utility that finds your 3DS games and installs compatible cheat files for them. It works alongside supported 3DS emulators rather than belonging to any one emulator project. Cheat codes come from third-party sources; use them at your own risk.", true)
+    private fun renderAbout() {
+        subsection("BREEZY'S CHEAT STATION")
+        line("Version ${BuildConfigVersion.name(this)}")
+        line("A companion utility that finds your games and installs compatible cheat files for supported emulators. It works alongside supported emulator projects rather than belonging to any one emulator project.", true)
+        line("Cheat codes come from third-party sources; use them at your own risk.", true)
     }
 
     private fun note(kind: Ui.Kind, msg: String) = Ui.show(banner, kind, msg)

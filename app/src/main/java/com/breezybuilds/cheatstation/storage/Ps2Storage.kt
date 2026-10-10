@@ -196,6 +196,25 @@ class Ps2Storage(private val ctx: Context) {
         val dir = when { root.name.equals("cheats", true) -> root; existing?.isDirectory == true -> existing; existing != null -> null; else -> root.createDirectory("cheats") }
         return dir?.let { DocumentFileStore(ctx, it) }
     }
+    fun ps2StorageState(): StorageState {
+        val emulator = detectEmulator()
+            ?: return StorageState.NOT_CONFIGURED
+
+        if (directCheatsStore() != null) {
+            return StorageState.ACCESSIBLE
+        }
+
+        if (transferDoc() != null) {
+            return StorageState.TRANSFER_ONLY
+        }
+
+        if (manualPath != null || emulator.path.isNotBlank()) {
+            return StorageState.PERMISSION_REQUIRED
+        }
+
+        return StorageState.DETECTED
+    }
+
     fun installTarget(): String = when {
         rootDoc() != null || directCheatsStore() != null -> "NetherSX2 data folder"
         transferDoc() != null -> "shared transfer folder (import into NetherSX2)"

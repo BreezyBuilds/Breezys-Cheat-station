@@ -288,6 +288,40 @@ class StorageManager(private val ctx: Context) {
         val decoded = Uri.decode(uri.lastPathSegment ?: "")
         return (doc?.name ?: decoded).ifBlank { decoded } + if (!hasPermission(uri)) "  (permission lost)" else ""
     }
+    fun threeDsStorageState(): StorageState {
+        val packageName = selected3dsEmulatorPackage
+            ?: return StorageState.NOT_CONFIGURED
+
+        val detected = EmulatorDetector
+            .detect3dsEmulators(ctx)
+            .any { it.packageName == packageName }
+
+        if (!detected) {
+            return StorageState.INVALID
+        }
+
+        selected3dsRootUri()?.let { uri ->
+            if (!hasPermission(uri)) {
+                return StorageState.PERMISSION_REQUIRED
+            }
+
+            val doc = DocumentFile.fromTreeUri(ctx, uri)
+                ?: return StorageState.INVALID
+
+            if (!doc.exists() || !doc.isDirectory) {
+                return StorageState.INVALID
+            }
+
+            return StorageState.ACCESSIBLE
+        }
+
+        return if (autoDetect3dsFolder() != null) {
+            StorageState.PERMISSION_REQUIRED
+        } else {
+            StorageState.DETECTED
+        }
+    }
+
     fun describe3dsRoot(): String {
         if (selected3dsEmulatorPackage == null) {
             return "Not configured"

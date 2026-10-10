@@ -12,6 +12,9 @@ import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.ScrollView
+import android.widget.Toast
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -21,7 +24,6 @@ import com.breezybuilds.cheatstation.cheats.dolphin.DolphinCheatInstaller
 import com.breezybuilds.cheatstation.model.Cheat
 import com.breezybuilds.cheatstation.provider.DolphinCheatProvider
 import com.google.android.material.appbar.MaterialToolbar
-import com.google.android.material.card.MaterialCardView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -35,6 +37,7 @@ class DolphinCheatsActivity : AppCompatActivity() {
 
     private val selected = LinkedHashSet<String>()
 
+    private lateinit var gameTitle: String
     private var titleId = ""
     private var loadedCheats: List<Cheat> = emptyList()
     private var installedNames: Set<String> = emptySet()
@@ -43,7 +46,7 @@ class DolphinCheatsActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val gameTitle = intent.getStringExtra("title") ?: "Game"
+        gameTitle = intent.getStringExtra("title") ?: "Game"
         titleId = intent.getStringExtra("titleId") ?: ""
         val platform = intent.getStringExtra("platform") ?: ""
 
@@ -56,6 +59,7 @@ class DolphinCheatsActivity : AppCompatActivity() {
             menu.add(Menu.NONE, 1, 1, "Refresh cheats")
             menu.add(Menu.NONE, 2, 2, "Select all")
             menu.add(Menu.NONE, 3, 3, "Select none")
+            menu.add(Menu.NONE, 5, 5, "Install all cheats")
 
             menu.add(
                 Menu.NONE,
@@ -83,6 +87,8 @@ class DolphinCheatsActivity : AppCompatActivity() {
                         adapter.notifyDataSetChanged()
                     }
 
+                    5 -> installAll()
+
                     4 -> {
                         val showing =
                             search.visibility == View.VISIBLE
@@ -107,8 +113,8 @@ class DolphinCheatsActivity : AppCompatActivity() {
 
         val header = Ui.tv(
             this,
-            "$gameTitle\n$titleId • ${platform.uppercase()}",
-            14f
+            gameTitle,
+            18f
         ).apply {
             setPadding(
                 Ui.dp(this@DolphinCheatsActivity, 16),
@@ -188,13 +194,15 @@ class DolphinCheatsActivity : AppCompatActivity() {
                     selected.remove(key)
                 }
             },
-            installedNames
+            installedNames,
+            ::showCheatDetails
         )
 
         val list = RecyclerView(this).apply {
             layoutManager = LinearLayoutManager(this@DolphinCheatsActivity)
             adapter = this@DolphinCheatsActivity.adapter
             clipToPadding = false
+            setPadding(0, 0, 0, Ui.dp(this@DolphinCheatsActivity, 16))
         }
 
         root.addView(
@@ -221,11 +229,6 @@ class DolphinCheatsActivity : AppCompatActivity() {
                 installSelected()
             }
 
-        val installAll =
-            Ui.button(this, "Install All", filled = false) {
-                installAll()
-            }
-
         val removeSelected =
             Ui.button(this, "Remove Selected", filled = false) {
                 removeSelected()
@@ -233,7 +236,6 @@ class DolphinCheatsActivity : AppCompatActivity() {
 
         buttons = listOf(
             installSelected,
-            installAll,
             removeSelected
         )
 
@@ -290,13 +292,10 @@ class DolphinCheatsActivity : AppCompatActivity() {
 
                 status.text = when {
                     result.cheats.isEmpty() ->
-                        "No cheats found for $titleId."
-
-                    installedNames.isEmpty() ->
-                        "${result.cheats.size} cheat(s) found • None installed"
+                        "No cheats available • ${installedNames.size} installed"
 
                     else ->
-                        "${result.cheats.size} cheat(s) found • " +
+                        "${result.cheats.size} ${if (result.cheats.size == 1) "cheat" else "cheats"} available • " +
                             "${installedNames.size} installed"
                 }
 
@@ -387,29 +386,33 @@ class DolphinCheatsActivity : AppCompatActivity() {
     }
 
     private fun removeSelected() {
-        val cheats = loadedCheats.filter {
-            it.key in selected
-        }
-
+        val cheats = loadedCheats.filter { it.key in selected && it.name in installedNames }
         if (cheats.isEmpty()) {
-            status.text = "Select at least one cheat first."
+            status.text = "Select at least one installed cheat first."
             return
         }
+        confirmRemoval(cheats)
+    }
 
+    private fun confirmRemoval(cheats: List<Cheat>) {
+        if (busy || cheats.isEmpty()) return
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Remove ${cheats.size} cheat(s)?")
+            .setMessage("Remove the selected cheats from Dolphin's game settings? Review the names before continuing.\n\n" + cheats.joinToString("\n") { "• ${it.name}" })
+            .setPositiveButton("Remove") { _, _ -> removeCheats(cheats) }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun removeCheats(cheats: List<Cheat>) {
         if (busy) return
-
         setBusy(true)
-        status.text =
-            "Removing ${cheats.size} selected cheat(s)…"
-
+        status.text = "Removing ${cheats.size} cheat(s)…"
         lifecycleScope.launch {
             val result = withContext(Dispatchers.IO) {
-                DolphinCheatInstaller(
-                    this@DolphinCheatsActivity,
-                    (application as App).dolphinStorage
-                ).remove(titleId, cheats)
+                DolphinCheatInstaller(this@DolphinCheatsActivity, (application as App).dolphinStorage)
+                    .remove(titleId, cheats)
             }
-
             result.fold(
                 onSuccess = {
                     selected.clear()
@@ -417,12 +420,66 @@ class DolphinCheatsActivity : AppCompatActivity() {
                     loadCheats()
                 },
                 onFailure = { error ->
-                    status.text =
-                        error.message ?: "Could not remove Dolphin cheats."
+                    status.text = error.message ?: "Could not remove Dolphin cheats."
                     setBusy(false)
                 }
             )
         }
+    }
+
+    private fun showCheatDetails(cheat: Cheat) {
+        if (busy) return
+        val ctx = this
+        val installed = cheat.name in installedNames
+        val content = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(Ui.dp(ctx, 22), Ui.dp(ctx, 8), Ui.dp(ctx, 22), Ui.dp(ctx, 8))
+        }
+        content.addView(Ui.tv(ctx, if (installed) "Installed · Database cheat" else "Not installed · Database cheat", 14f), Ui.lp().apply {
+            bottomMargin = Ui.dp(ctx, 16)
+        })
+        val dialog = MaterialAlertDialogBuilder(ctx)
+            .setTitle(cheat.name)
+            .setView(ScrollView(ctx).apply { addView(content) })
+            .setNegativeButton("Close", null)
+            .create()
+        fun action(label: String, run: () -> Unit) {
+            content.addView(Ui.button(ctx, label, filled = false) {
+                dialog.dismiss()
+                run()
+            }, Ui.lp(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = Ui.dp(ctx, 12)
+            })
+        }
+        action(if (installed) "Reinstall cheat" else "Install cheat") {
+            applyCheats(listOf(cheat), "Installing ${cheat.name}…")
+        }
+        if (installed) action("Remove from emulator") { confirmRemoval(listOf(cheat)) }
+        val codeText = cheat.codeLines.joinToString("\n")
+        if (codeText.isNotBlank()) {
+            val code = Ui.tv(ctx, codeText, 12f).apply {
+                setTextIsSelectable(true)
+                setPadding(Ui.dp(ctx, 10), Ui.dp(ctx, 10), Ui.dp(ctx, 10), Ui.dp(ctx, 10))
+                setBackgroundColor(0xFF182337.toInt())
+                visibility = View.GONE
+            }
+            val copy = Ui.button(ctx, "Copy code", filled = false) {
+                val clipboard = getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                clipboard.setPrimaryClip(android.content.ClipData.newPlainText(cheat.name, codeText))
+                Toast.makeText(ctx, "Cheat code copied", Toast.LENGTH_SHORT).show()
+            }.apply { visibility = View.GONE }
+            val toggle = Ui.button(ctx, "View cheat code", filled = false) { }
+            toggle.setOnClickListener {
+                val expanded = code.visibility != View.VISIBLE
+                code.visibility = if (expanded) View.VISIBLE else View.GONE
+                copy.visibility = if (expanded) View.VISIBLE else View.GONE
+                toggle.text = if (expanded) "Hide cheat code" else "View cheat code"
+            }
+            content.addView(toggle, Ui.lp(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = Ui.dp(ctx, 12) })
+            content.addView(code, Ui.lp())
+            content.addView(copy, Ui.lp(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        }
+        dialog.show()
     }
 
     private fun visibleCheats(): List<Cheat> {
@@ -452,124 +509,74 @@ private class DolphinCheatAdapter(
     private val source: () -> List<Cheat>,
     private val selected: Set<String>,
     private val onSelected: (String, Boolean) -> Unit,
-    private var installed: Set<String>
+    private var installed: Set<String>,
+    private val onDetails: (Cheat) -> Unit
 ) : RecyclerView.Adapter<DolphinCheatAdapter.VH>() {
 
     fun updateInstalled(names: Set<String>) {
         installed = names
     }
 
-    override fun onCreateViewHolder(
-        parent: ViewGroup,
-        viewType: Int
-    ): VH {
+    class VH(
+        val root: LinearLayout,
+        val check: CheckBox,
+        val name: TextView,
+        val badge: TextView,
+        val details: TextView
+    ) : RecyclerView.ViewHolder(root)
+
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
         val ctx = parent.context
-
-        val card = MaterialCardView(ctx).apply {
-            radius = Ui.dp(ctx, 14).toFloat()
-            setCardElevation(Ui.dp(ctx, 1).toFloat())
-
+        val root = Ui.vbox(ctx).apply {
             layoutParams = RecyclerView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply {
-                setMargins(
-                    Ui.dp(ctx, 8),
-                    Ui.dp(ctx, 4),
-                    Ui.dp(ctx, 8),
-                    Ui.dp(ctx, 4)
-                )
-            }
+            )
+            setPadding(Ui.dp(ctx, 12), Ui.dp(ctx, 8), Ui.dp(ctx, 12), Ui.dp(ctx, 8))
         }
-
-        val row = LinearLayout(ctx).apply {
+        val line = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(
-                Ui.dp(ctx, 8),
-                Ui.dp(ctx, 10),
-                Ui.dp(ctx, 12),
-                Ui.dp(ctx, 10)
-            )
+            gravity = android.view.Gravity.CENTER_VERTICAL
         }
-
-        val check = CheckBox(ctx)
-
-        val textBox = LinearLayout(ctx).apply {
-            orientation = LinearLayout.VERTICAL
+        val check = CheckBox(ctx).apply { minWidth = Ui.dp(ctx, 44) }
+        val name = Ui.tv(ctx, "", 14f).apply {
+            setPadding(Ui.dp(ctx, 3), 0, Ui.dp(ctx, 5), 0)
         }
-
-        val name = Ui.tv(
-            ctx,
-            "",
-            15f,
-            bold = true
-        )
-
-        val state = Ui.tv(
-            ctx,
-            "",
-            12f,
-            secondary = true
-        )
-
-        textBox.addView(name, Ui.lp())
-        textBox.addView(state, Ui.lp())
-
-        row.addView(
-            check,
-            Ui.lp(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-        )
-
-        row.addView(
-            textBox,
-            Ui.lp(
-                0,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                1f
-            )
-        )
-
-        card.addView(row)
-
-        return VH(card, check, name, state)
+        val badge = Ui.tv(ctx, "", 11f, bold = true).apply {
+            setPadding(Ui.dp(ctx, 6), Ui.dp(ctx, 5), Ui.dp(ctx, 6), Ui.dp(ctx, 5))
+        }
+        val details = Ui.tv(ctx, "›", 25f).apply {
+            setPadding(Ui.dp(ctx, 10), 0, Ui.dp(ctx, 6), 0)
+            contentDescription = "Open cheat details"
+        }
+        line.addView(check, Ui.lp(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        line.addView(name, Ui.lp(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        line.addView(badge, Ui.lp(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        line.addView(details, Ui.lp(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        root.addView(line, Ui.lp())
+        root.addView(View(ctx).apply {
+            setBackgroundColor(0xFF263345.toInt())
+        }, Ui.lp(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(ctx, 1)))
+        return VH(root, check, name, badge, details)
     }
 
-    override fun onBindViewHolder(
-        holder: VH,
-        position: Int
-    ) {
-        holder.bind(source()[position])
-    }
-
-    override fun getItemCount(): Int =
-        source().size
-
-    inner class VH(
-        view: View,
-        private val check: CheckBox,
-        private val name: TextView,
-        private val state: TextView
-    ) : RecyclerView.ViewHolder(view) {
-
-        fun bind(cheat: Cheat) {
-            check.setOnCheckedChangeListener(null)
-            check.isChecked = cheat.key in selected
-
-            name.text = cheat.name
-
-            state.text =
-                if (cheat.name in installed) {
-                    "Installed"
-                } else {
-                    "${cheat.codeLines.size} code line(s)"
-                }
-
-            check.setOnCheckedChangeListener { _, checked ->
-                onSelected(cheat.key, checked)
-            }
+    override fun onBindViewHolder(holder: VH, position: Int) {
+        val cheat = source()[position]
+        val isInstalled = cheat.name in installed
+        holder.check.setOnCheckedChangeListener(null)
+        holder.check.isChecked = cheat.key in selected
+        holder.check.setOnCheckedChangeListener { _, checked ->
+            onSelected(cheat.key, checked)
         }
+        holder.name.text = cheat.name
+        holder.badge.text = if (isInstalled) "Installed" else "Not installed"
+        holder.badge.setTextColor(if (isInstalled) 0xFF66DFA6.toInt() else 0xFFB3BED0.toInt())
+        holder.details.setTextColor(0xFF94A3B8.toInt())
+        holder.name.setOnClickListener { onDetails(cheat) }
+        holder.badge.setOnClickListener { onDetails(cheat) }
+        holder.details.setOnClickListener { onDetails(cheat) }
+        holder.root.setOnClickListener { onDetails(cheat) }
     }
+
+    override fun getItemCount(): Int = source().size
 }
