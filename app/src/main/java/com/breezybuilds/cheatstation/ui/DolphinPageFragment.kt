@@ -13,6 +13,9 @@ import com.breezybuilds.cheatstation.App
 import com.breezybuilds.cheatstation.R
 import com.breezybuilds.cheatstation.model.Game
 import com.breezybuilds.cheatstation.scan.DolphinPlatform
+import com.breezybuilds.cheatstation.provider.DolphinCheatProvider
+import com.breezybuilds.cheatstation.provider.ProviderException
+import com.breezybuilds.cheatstation.provider.ProviderError
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -24,6 +27,7 @@ class DolphinPageFragment(
     private lateinit var status: TextView
     private lateinit var recycler: RecyclerView
     private lateinit var adapter: DolphinGameAdapter
+    private val cheatCounts = mutableMapOf<String, Int>()
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -32,12 +36,24 @@ class DolphinPageFragment(
         recycler = view.findViewById(R.id.dolphin_games)
 
 
-        adapter = DolphinGameAdapter { game -> openCheats(game) }
+        adapter = DolphinGameAdapter(
+            countFor = { game -> cheatCounts[game.titleId] ?: GameCheatStatus.get(requireContext(), platform.name, game.titleId) },
+            showTechnicalDetails = (requireActivity().application as App).settings.showTechnicalGameDetails
+        ) { game -> openCheats(game) }
 
         recycler.layoutManager = LinearLayoutManager(requireContext())
         recycler.adapter = adapter
 
         scan()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (::adapter.isInitialized) {
+            adapter.setShowTechnicalDetails(
+                (requireActivity().application as App).settings.showTechnicalGameDetails
+            )
+        }
     }
 
     private fun openCheats(game: Game) {
@@ -65,6 +81,35 @@ class DolphinPageFragment(
         } else {
             "${adapter.itemCount} matching game(s)"
         }
+
+    }
+
+
+    private fun updateCheatCounts(items: List<Game>) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val application = requireActivity().application as App
+            for (game in items) {
+                val id = game.titleId
+                if (cheatCounts.containsKey(id)) continue
+                val cached = GameCheatStatus.get(requireContext(), platform.name, id)
+                if (cached != null) {
+                    cheatCounts[id] = cached
+                } else {
+                    val count = withContext(Dispatchers.IO) {
+                        try {
+                            DolphinCheatProvider({ application.dolphinSettings.sources() }).fetch(id).cheats.size
+                        } catch (e: ProviderException) {
+                            if (e.kind == ProviderError.NOT_FOUND) 0 else null
+                        } catch (_: Exception) { null }
+                    }
+                    if (count != null) {
+                        cheatCounts[id] = count
+                        GameCheatStatus.put(requireContext(), platform.name, id, count)
+                    }
+                }
+                adapter.notifyDataSetChanged()
+            }
+        }
     }
 
     private fun scan() {
@@ -81,6 +126,7 @@ class DolphinPageFragment(
             }
 
             adapter.submitList(result.games)
+            updateCheatCounts(result.games)
 
             status.text = when {
                 result.error != null -> result.error
@@ -111,13 +157,22 @@ class DolphinPageFragment(
                         ""
                     }
             }
-        }
+
+            }
     }
 }
 
 private class DolphinGameAdapter(
+    private val countFor: (Game) -> Int?,
+    private var showTechnicalDetails: Boolean,
     private val onClick: (Game) -> Unit
 ) : RecyclerView.Adapter<DolphinGameAdapter.GameViewHolder>() {
+
+    fun setShowTechnicalDetails(show: Boolean) {
+        if (showTechnicalDetails == show) return
+        showTechnicalDetails = show
+        notifyDataSetChanged()
+    }
 
     private val games = mutableListOf<Game>()
     private val allGames = mutableListOf<Game>()
@@ -181,10 +236,14 @@ private class DolphinGameAdapter(
 
         private val details =
             view.findViewById<TextView>(R.id.dolphin_game_details)
+        private val availability = view.findViewById<TextView>(R.id.dolphin_game_availability)
 
         fun bind(game: Game) {
             title.text = game.title
+            val count = countFor(game)
+            GameCheatStatus.style(availability, count?.let { "$it cheats available" } ?: "Check cheats")
             details.text = "${game.titleId}  •  ${game.source}"
+            details.visibility = if (showTechnicalDetails) View.VISIBLE else View.GONE
 
             itemView.setOnClickListener {
                 onClick(game)

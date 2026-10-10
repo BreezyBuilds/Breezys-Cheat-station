@@ -9,6 +9,7 @@ import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.ScrollView
 import android.widget.Toast
 import android.text.Editable
 import android.text.TextWatcher
@@ -19,7 +20,6 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.progressindicator.LinearProgressIndicator
 import com.breezybuilds.cheatstation.app
 import com.breezybuilds.cheatstation.cheats.CheatInstaller
@@ -75,6 +75,7 @@ class CheatsActivity : AppCompatActivity() {
         toolbar.menu.add(Menu.NONE, 2, 2, "Select all")
         toolbar.menu.add(Menu.NONE, 3, 3, "Select none")
         toolbar.menu.add(Menu.NONE, 5, 4, "Game information")
+        toolbar.menu.add(Menu.NONE, 6, 5, "Install all available")
         val searchItem = toolbar.menu.add(Menu.NONE, 4, 0, "Search cheats").apply {
             setIcon(android.R.drawable.ic_menu_search)
             setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
@@ -82,6 +83,13 @@ class CheatsActivity : AppCompatActivity() {
         toolbar.setOnMenuItemClickListener {
             when (it.itemId) {
                 5 -> showGameInformation()
+                6 -> {
+                    val available = rows.mapNotNull { it.remote }
+                    MaterialAlertDialogBuilder(this).setTitle("Install all available cheats?")
+                        .setMessage("Install ${available.size} available cheats for ${game.title}? Existing conflicts will be reviewed before replacement.")
+                        .setPositiveButton("Continue") { _, _ -> install(available) }
+                        .setNegativeButton("Cancel", null).show()
+                }
                 4 -> {
                     val showing = search.visibility == View.VISIBLE
                     search.visibility = if (showing) View.GONE else View.VISIBLE
@@ -102,7 +110,7 @@ class CheatsActivity : AppCompatActivity() {
         progress = LinearProgressIndicator(ctx).apply { isIndeterminate = true; visibility = View.GONE }
         root.addView(progress, Ui.lp())
 
-        header = Ui.tv(ctx, "", 14f).apply {
+        header = Ui.tv(ctx, "", 18f, bold = true).apply {
             setPadding(Ui.dp(ctx, 16), Ui.dp(ctx, 4), Ui.dp(ctx, 16), Ui.dp(ctx, 4))
         }
         root.addView(header, Ui.lp())
@@ -124,7 +132,7 @@ class CheatsActivity : AppCompatActivity() {
         })
 
         compatBanner = Ui.tv(ctx, "", 12f).apply {
-            setTextColor(android.graphics.Color.rgb(190, 45, 45))
+            setTextColor(0xFFD9A35D.toInt())
             setPadding(Ui.dp(ctx, 16), 0, Ui.dp(ctx, 16), Ui.dp(ctx, 4))
             visibility = View.GONE
         }
@@ -132,15 +140,19 @@ class CheatsActivity : AppCompatActivity() {
         banner = Ui.banner(ctx)
         root.addView(banner, Ui.lp())
 
-        adapter = CheatAdapter(::visibleRows, selected, { key, on -> if (on) selected.add(key) else selected.remove(key) }, ::onEnableToggle, supportsEnableToggle = !isPs2)
-        val list = RecyclerView(ctx).apply { layoutManager = LinearLayoutManager(ctx); this.adapter = this@CheatsActivity.adapter }
+        adapter = CheatAdapter(::visibleRows, selected, { key, on -> if (on) selected.add(key) else selected.remove(key) }, ::showCheatDetails)
+        val list = RecyclerView(ctx).apply {
+            layoutManager = LinearLayoutManager(ctx)
+            this.adapter = this@CheatsActivity.adapter
+            clipToPadding = false
+            setPadding(0, 0, 0, Ui.dp(ctx, 20))
+        }
         root.addView(list, Ui.lp(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
 
         val bar = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; setPadding(Ui.dp(ctx, 8), Ui.dp(ctx, 6), Ui.dp(ctx, 8), Ui.dp(ctx, 6)) }
         val b1 = Ui.button(ctx, "Install Selected") { install(rows.filter { it.key in selected }.mapNotNull { it.remote }) }
-        val b2 = Ui.button(ctx, "Install All", filled = false) { install(rows.mapNotNull { it.remote }) }
         val b3 = Ui.button(ctx, "Remove Selected", filled = false) { remove() }
-        buttons = listOf(b1, b2, b3)
+        buttons = listOf(b1, b3)
         buttons.forEach { bar.addView(it, Ui.lp(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { setMargins(Ui.dp(ctx, 3), 0, Ui.dp(ctx, 3), 0) }) }
         root.addView(bar, Ui.lp())
         setContentView(root)
@@ -192,10 +204,9 @@ class CheatsActivity : AppCompatActivity() {
         val inst = installedFile?.cheats?.size
         header.text = buildString {
             append(game.title).append("\n")
-            append(game.titleId).append(" • ").append(if (isPs2) "PS2" else "3DS").append("\n")
-            append(if (avail != null) "$avail cheat(s) available" else "Cheats not loaded")
+            append(if (avail != null) "$avail ${if (avail == 1) "cheat" else "cheats"} available" else "Cheats not loaded")
             append(" • ")
-            append(if (inst != null) "$inst installed" else "installed: unknown")
+            append(if (inst != null) "$inst installed" else "Installed: unknown")
         }
     }
 
@@ -335,9 +346,90 @@ class CheatsActivity : AppCompatActivity() {
         }
     }
 
-    private fun remove() {
+    /** Details stay separate from bulk selection, with direct actions rather than nested menus. */
+    private fun showCheatDetails(row: CheatRow) {
         if (busy) return
-        val names = rows.filter { it.key in selected && it.installed != null }.map { it.name }
+        val current = rows.firstOrNull { it.key == row.key } ?: row
+        val installed = current.installed
+        val source = current.remote
+        val ctx = this
+        val content = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(Ui.dp(ctx, 22), Ui.dp(ctx, 8), Ui.dp(ctx, 22), Ui.dp(ctx, 8))
+        }
+        fun label(value: String, size: Float = 14f) {
+            content.addView(Ui.tv(ctx, value, size).apply {
+                setPadding(0, Ui.dp(ctx, 6), 0, Ui.dp(ctx, 6))
+            })
+        }
+        label(buildString {
+            append(if (installed != null) "Installed" else "Not installed")
+            if (installed != null) append(if (installed.enabled) " · Enabled" else " · Disabled")
+            append(if (source == null) " · Local cheat" else " · Database cheat")
+        })
+        if (current.differs) label("Installed code differs from the online version")
+        val dialog = MaterialAlertDialogBuilder(ctx)
+            .setTitle(current.name)
+            .setView(ScrollView(ctx).apply {
+                isFillViewport = false
+                addView(content)
+            })
+            .setNegativeButton("Close", null)
+            .create()
+        // Primary actions appear immediately below status, before technical details.
+        fun action(title: String, operation: () -> Unit) {
+            content.addView(Ui.button(ctx, title, filled = false) {
+                dialog.dismiss()
+                operation()
+            }, Ui.lp(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = Ui.dp(ctx, 12)
+            })
+        }
+        if (source != null) action(if (installed == null) "Install cheat" else "Reinstall cheat") {
+            install(listOf(source))
+        }
+        if (installed != null) {
+            action(if (installed.enabled) "Disable cheat" else "Enable cheat") {
+                onEnableToggle(current, !installed.enabled)
+            }
+            action("Remove from emulator") {
+                removeKeys(setOf(current.key))
+            }
+        }
+        val cheat = installed ?: source
+        cheat?.description?.takeIf { it.isNotBlank() }?.let { label(it) }
+        val codeText = cheat?.lines?.joinToString("\n").orEmpty()
+        if (codeText.isNotBlank()) {
+            val code = Ui.tv(ctx, codeText, 12f).apply {
+                setTextIsSelectable(true)
+                setPadding(Ui.dp(ctx, 10), Ui.dp(ctx, 10), Ui.dp(ctx, 10), Ui.dp(ctx, 10))
+                setBackgroundColor(0xFF182337.toInt())
+                visibility = View.GONE
+            }
+            val copy = Ui.button(ctx, "Copy code", filled = false) {
+                val clipboard = getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                clipboard.setPrimaryClip(android.content.ClipData.newPlainText(current.name, codeText))
+                Toast.makeText(ctx, "Cheat code copied", Toast.LENGTH_SHORT).show()
+            }.apply { visibility = View.GONE }
+            val toggle = Ui.button(ctx, "View cheat code", filled = false) { }
+            toggle.setOnClickListener {
+                val expanded = code.visibility != View.VISIBLE
+                code.visibility = if (expanded) View.VISIBLE else View.GONE
+                copy.visibility = if (expanded) View.VISIBLE else View.GONE
+                toggle.text = if (expanded) "Hide cheat code" else "View cheat code"
+            }
+            content.addView(toggle, Ui.lp(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = Ui.dp(ctx, 12) })
+            content.addView(code, Ui.lp())
+            content.addView(copy, Ui.lp(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        }
+        dialog.show()
+    }
+
+    private fun remove() = removeKeys(selected.toSet())
+
+    private fun removeKeys(keys: Set<String>) {
+        if (busy) return
+        val names = rows.filter { it.key in keys && it.installed != null }.map { it.name }
         if (names.isEmpty()) { Toast.makeText(this, "Select installed cheats to remove.", Toast.LENGTH_SHORT).show(); return }
         if (isPs2) { val installer=ps2InstallerOrError() ?: return; MaterialAlertDialogBuilder(this).setTitle("Remove ${names.size} PS2 cheat(s)?").setMessage(names.joinToString("\n") { "• $it" } + "\n\nA backup of the PNACH file is made first.").setPositiveButton("Remove") { _, _ -> setBusy(true); lifecycleScope.launch { val r=withContext(Dispatchers.IO){installer.remove(game.titleId,names.toSet())}; setBusy(false); showResult(r); reloadInstalled() } }.setNegativeButton("Cancel",null).show(); return }
         val installer = installerOrError() ?: return
@@ -373,83 +465,57 @@ class CheatAdapter(
     private val rows: () -> List<CheatRow>,
     private val selected: Set<String>,
     private val onSelect: (String, Boolean) -> Unit,
-    private val onEnable: (CheatRow, Boolean) -> Unit,
-    private val supportsEnableToggle: Boolean = true,
+    private val onDetails: (CheatRow) -> Unit,
 ) : RecyclerView.Adapter<CheatAdapter.VH>() {
 
     class VH(
         val root: LinearLayout,
         val check: CheckBox,
-        val sw: MaterialSwitch
+        val name: TextView,
+        val badge: TextView,
+        val details: TextView,
     ) : RecyclerView.ViewHolder(root)
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
         val ctx = parent.context
-
         val root = Ui.vbox(ctx).apply {
-            layoutParams = RecyclerView.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-            setPadding(
-                Ui.dp(ctx, 12),
-                Ui.dp(ctx, 6),
-                Ui.dp(ctx, 16),
-                Ui.dp(ctx, 6)
-            )
+            layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            setPadding(Ui.dp(ctx, 12), Ui.dp(ctx, 8), Ui.dp(ctx, 12), Ui.dp(ctx, 8))
         }
-
-        val top = LinearLayout(ctx).apply {
+        val line = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = android.view.Gravity.CENTER_VERTICAL
         }
-
-        val check = CheckBox(ctx).apply {
-            textSize = 16f
+        val check = CheckBox(ctx).apply { minWidth = Ui.dp(ctx, 44) }
+        val name = Ui.tv(ctx, "", 14f).apply { setPadding(Ui.dp(ctx, 3), 0, Ui.dp(ctx, 5), 0) }
+        val badge = Ui.tv(ctx, "", 11f, bold = true).apply {
+            setPadding(Ui.dp(ctx, 6), Ui.dp(ctx, 5), Ui.dp(ctx, 6), Ui.dp(ctx, 5))
         }
-
-        val sw = MaterialSwitch(ctx)
-
-        top.addView(
-            check,
-            Ui.lp(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-        )
-
-        top.addView(
-            sw,
-            Ui.lp(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-        )
-
-        root.addView(top, Ui.lp())
-
-        return VH(root, check, sw)
+        val details = Ui.tv(ctx, "›", 25f).apply {
+            setPadding(Ui.dp(ctx, 10), 0, Ui.dp(ctx, 6), 0)
+            contentDescription = "Open cheat details"
+        }
+        line.addView(check, Ui.lp(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        line.addView(name, Ui.lp(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        line.addView(badge, Ui.lp(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        line.addView(details, Ui.lp(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        root.addView(line, Ui.lp())
+        root.addView(View(ctx).apply { setBackgroundColor(0xFF263345.toInt()) }, Ui.lp(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(ctx, 1)))
+        return VH(root, check, name, badge, details)
     }
 
     override fun onBindViewHolder(h: VH, position: Int) {
         val r = rows()[position]
-
         h.check.setOnCheckedChangeListener(null)
-        h.check.text = r.name
         h.check.isChecked = r.key in selected
-
-        h.check.setOnCheckedChangeListener { _, on ->
-            onSelect(r.key, on)
-        }
-
-        h.sw.setOnCheckedChangeListener(null)
-
-        if (r.installed != null && supportsEnableToggle) {
-            h.sw.visibility = View.VISIBLE
-            h.sw.isChecked = r.installed.enabled
-            h.sw.setOnCheckedChangeListener { _, on ->
-                onEnable(r, on)
-            }
-        } else {
-            h.sw.visibility = View.GONE
-        }
+        h.check.setOnCheckedChangeListener { _, checked -> onSelect(r.key, checked) }
+        h.name.text = r.name
+        h.badge.text = if (r.installed != null) "Installed" else "Not installed"
+        h.badge.setTextColor(if (r.installed != null) 0xFF66DFA6.toInt() else 0xFFB3BED0.toInt())
+        h.details.setTextColor(0xFF94A3B8.toInt())
+        h.name.setOnClickListener { onDetails(r) }
+        h.badge.setOnClickListener { onDetails(r) }
+        h.details.setOnClickListener { onDetails(r) }
     }
 
     override fun getItemCount() = rows().size

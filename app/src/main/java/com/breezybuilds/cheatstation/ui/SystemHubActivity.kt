@@ -3,12 +3,13 @@ package com.breezybuilds.cheatstation.ui
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
+import android.view.View
 import android.view.ViewGroup
+import android.widget.PopupMenu
 import android.widget.SearchView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
 import androidx.viewpager2.widget.ViewPager2
-import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
 
@@ -16,61 +17,89 @@ class SystemHubActivity : AppCompatActivity() {
 
     private lateinit var pager: ViewPager2
     private lateinit var tabs: TabLayout
-    private lateinit var toolbar: MaterialToolbar
-    private var searchItem: MenuItem? = null
+    private lateinit var gameHeader: View
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val root = Ui.vbox(this)
+        val root = Ui.vbox(this).apply { setBackgroundColor(0xFF0A111E.toInt()) }
         Ui.edgeToEdge(root)
 
-        toolbar = MaterialToolbar(this).apply {
-            title = "Breezy's Cheat Station"
+        gameHeader = android.widget.LinearLayout(this).apply {
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            setPadding(
+                Ui.dp(this@SystemHubActivity, 12),
+                Ui.dp(this@SystemHubActivity, 6),
+                Ui.dp(this@SystemHubActivity, 8),
+                Ui.dp(this@SystemHubActivity, 6)
+            )
+        }
 
-            val search = menu.add(
-                Menu.NONE,
-                100,
+        val searchButton = Ui.tv(
+            this,
+            "⌕",
+            24f,
+            bold = true
+        ).apply {
+            gravity = android.view.Gravity.CENTER
+            contentDescription = "Search games"
+            setPadding(
+                Ui.dp(this@SystemHubActivity, 8),
                 0,
-                "Search games"
-            ).apply {
-                setIcon(android.R.drawable.ic_menu_search)
-                setShowAsAction(
-                    MenuItem.SHOW_AS_ACTION_ALWAYS
-                )
-            }
+                Ui.dp(this@SystemHubActivity, 8),
+                0
+            )
 
-            val searchView = SearchView(this@SystemHubActivity).apply {
-                queryHint = "Search games"
-                isIconified = true
-
-                setOnQueryTextListener(
-                    object : SearchView.OnQueryTextListener {
-                        override fun onQueryTextSubmit(
-                            query: String
-                        ): Boolean {
-                            setSearchQuery(query)
-                            clearFocus()
-                            return true
-                        }
-
-                        override fun onQueryTextChange(
-                            newText: String
-                        ): Boolean {
-                            setSearchQuery(newText)
-                            return true
-                        }
-                    }
-                )
-            }
-
-            search.actionView = searchView
-            searchItem = search
-
-            setOnMenuItemClickListener { item ->
-                handleMenuAction(item.itemId)
+            setOnClickListener {
+                showSearch()
             }
         }
+
+        // Push the search and overflow actions to the right side of the toolbar.
+        (gameHeader as android.widget.LinearLayout).addView(
+            View(this),
+            android.widget.LinearLayout.LayoutParams(
+                0,
+                1,
+                1f
+            )
+        )
+
+        (gameHeader as android.widget.LinearLayout).addView(
+            searchButton,
+            Ui.lp(
+                Ui.dp(this, 44),
+                Ui.dp(this, 44)
+            )
+        )
+
+        val menuButton = Ui.tv(
+            this,
+            "⋮",
+            24f,
+            bold = true
+        ).apply {
+            gravity = android.view.Gravity.CENTER
+            contentDescription = "Game options"
+            setPadding(
+                Ui.dp(this@SystemHubActivity, 8),
+                0,
+                Ui.dp(this@SystemHubActivity, 4),
+                0
+            )
+
+            setOnClickListener {
+                showGameMenu(this)
+            }
+        }
+
+        (gameHeader as android.widget.LinearLayout).addView(
+            menuButton,
+            Ui.lp(
+                Ui.dp(this, 36),
+                Ui.dp(this, 44)
+            )
+        )
 
         tabs = TabLayout(this)
 
@@ -78,8 +107,8 @@ class SystemHubActivity : AppCompatActivity() {
             orientation = ViewPager2.ORIENTATION_HORIZONTAL
         }
 
-        root.addView(toolbar, Ui.lp())
         root.addView(tabs, Ui.lp())
+        root.addView(gameHeader, Ui.lp())
         root.addView(
             pager,
             Ui.lp(
@@ -111,90 +140,71 @@ class SystemHubActivity : AppCompatActivity() {
             object : ViewPager2.OnPageChangeCallback() {
                 override fun onPageSelected(position: Int) {
                     super.onPageSelected(position)
-                    updateToolbar(position)
                 }
             }
         )
 
-        updateToolbar(pager.currentItem)
     }
 
-    private fun updateToolbar(position: Int) {
-        val search = searchItem?.actionView as? SearchView
+    private fun showSearch() {
+        val search = SearchView(this).apply {
+            queryHint = "Search games"
+            setIconifiedByDefault(false)
 
-        search?.setQuery("", false)
-        search?.clearFocus()
-        search?.isIconified = true
+            setOnQueryTextListener(
+                object : SearchView.OnQueryTextListener {
+                    override fun onQueryTextSubmit(
+                        query: String
+                    ): Boolean {
+                        setSearchQuery(query)
+                        return true
+                    }
 
-        toolbar.menu.removeItem(101)
-        toolbar.menu.removeItem(102)
-        toolbar.menu.removeItem(103)
-        toolbar.menu.removeItem(104)
-        toolbar.menu.removeItem(105)
-
-        when (position) {
-            0 -> {
-                toolbar.menu.add(
-                    Menu.NONE,
-                    101,
-                    1,
-                    "Rescan games"
-                )
-
-                toolbar.menu.add(
-                    Menu.NONE,
-                    102,
-                    2,
-                    "Add game by Title ID"
-                )
-
-                toolbar.menu.add(
-                    Menu.NONE,
-                    103,
-                    3,
-                    "Refresh cheat database"
-                )
-
-                toolbar.menu.add(
-                    Menu.NONE,
-                    104,
-                    4,
-                    "Settings"
-                )
-            }
-
-            1 -> {
-                toolbar.menu.add(
-                    Menu.NONE,
-                    101,
-                    1,
-                    "Rescan games"
-                )
-
-                toolbar.menu.add(
-                    Menu.NONE,
-                    105,
-                    2,
-                    "Cheat source"
-                )
-
-                toolbar.menu.add(
-                    Menu.NONE,
-                    104,
-                    3,
-                    "Settings"
-                )
-            }
-
-            2, 3 -> {
-                toolbar.menu.add(
-                    Menu.NONE,
-                    101,
-                    1,
-                    "Rescan games"
-                )
-            }
+                    override fun onQueryTextChange(
+                        newText: String
+                    ): Boolean {
+                        setSearchQuery(newText)
+                        return true
+                    }
+                }
+            )
         }
+
+        val dialog = androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Search games")
+            .setView(search)
+            .setNegativeButton("Close", null)
+            .create()
+
+        dialog.setOnShowListener {
+            search.requestFocus()
+        }
+
+        dialog.show()
+    }
+
+    private fun showGameMenu(anchor: View) {
+        val popup = PopupMenu(this, anchor)
+
+        popup.menu.add(
+            Menu.NONE,
+            101,
+            1,
+            "Rescan games"
+        )
+
+        popup.menu.add(
+            Menu.NONE,
+            104,
+            2,
+            "Settings"
+        )
+
+        popup.setOnMenuItemClickListener { item ->
+            handleMenuAction(item.itemId)
+        }
+
+        popup.show()
     }
 
     private fun handleMenuAction(itemId: Int): Boolean {

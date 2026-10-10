@@ -2,9 +2,12 @@ package com.breezybuilds.cheatstation.ui
 
 import android.content.Context
 import android.graphics.Typeface
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.util.TypedValue
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.ContextCompat
@@ -36,10 +39,21 @@ object Ui {
             if (secondary) setTextColor(attrColor(ctx, android.R.attr.textColorSecondary))
         }
 
+    // One consistent dark button style across every settings page.
     fun button(ctx: Context, label: String, filled: Boolean = true, onClick: () -> Unit): MaterialButton =
-        (if (filled) MaterialButton(ctx) else MaterialButton(ctx, null, com.google.android.material.R.attr.materialButtonOutlinedStyle)).apply {
+        MaterialButton(ctx, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
             text = label
             isAllCaps = false
+            textSize = 13f
+            setTextColor(0xFFE7EDF8.toInt())
+            backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF1A273B.toInt())
+            strokeColor = android.content.res.ColorStateList.valueOf(0xFF34435A.toInt())
+            strokeWidth = dp(ctx, 1)
+            cornerRadius = dp(ctx, 12)
+            minHeight = dp(ctx, 44)
+            minimumHeight = dp(ctx, 44)
+            insetTop = 0
+            insetBottom = 0
             setOnClickListener { onClick() }
         }
     fun compactButton(ctx: Context, label: String, onClick: () -> Unit): MaterialButton =
@@ -54,126 +68,134 @@ object Ui {
         }
 
 
-    /** Consistent navigation card used by the Settings hub and system pages. */
-    fun settingsCard(
-        ctx: Context,
-        title: String,
-        subtitle: String,
-        onClick: () -> Unit
-    ): MaterialCardView = MaterialCardView(ctx).apply {
-        isClickable = true
-        isFocusable = true
-        radius = dp(ctx, 14).toFloat()
-        strokeWidth = dp(ctx, 1)
-        setOnClickListener { onClick() }
+    /** Shared visual tokens for the illustrated-console / clean-settings hybrid. */
+    private const val SURFACE = 0xFF151E2C.toInt()
+    private const val OUTLINE = 0xFF2A364A.toInt()
+    private const val MUTED = 0xFFABB8CD.toInt()
 
-        val row = LinearLayout(ctx).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = android.view.Gravity.CENTER_VERTICAL
-            setPadding(dp(ctx, 16), dp(ctx, 14), dp(ctx, 12), dp(ctx, 14))
-        }
-
-        val textBox = LinearLayout(ctx).apply {
-            orientation = LinearLayout.VERTICAL
-        }
-        textBox.addView(tv(ctx, title, 16f, bold = true), lp(weight = 1f))
-        textBox.addView(tv(ctx, subtitle, 13f, secondary = true).apply {
-            setPadding(0, dp(ctx, 3), 0, 0)
-        }, lp())
-
-        row.addView(textBox, lp(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        row.addView(tv(ctx, "›", 28f, secondary = true).apply {
-            gravity = android.view.Gravity.CENTER
-        }, lp(dp(ctx, 32), ViewGroup.LayoutParams.WRAP_CONTENT))
-        addView(row, lp())
+    private fun systemAccent(name: String): Int = when (name.uppercase()) {
+        "3DS" -> 0xFFE34050.toInt()
+        "PS2" -> 0xFF247EE8.toInt()
+        "WII" -> 0xFF13A5D6.toInt()
+        "GAMECUBE" -> 0xFF8459DB.toInt()
+        else -> 0xFF6284B8.toInt()
     }
 
-
-    /** Compact Station-style status panel used by system settings. */
-    fun statusPanel(
-        ctx: Context,
-        system: String,
-        status: StorageStatus,
-        emulator: String? = null
-    ): MaterialCardView = MaterialCardView(ctx).apply {
-        radius = dp(ctx, 14).toFloat()
-        strokeWidth = dp(ctx, 1)
-        setCardBackgroundColor(
-            attrColor(ctx, com.google.android.material.R.attr.colorSurface)
-        )
-        strokeColor = attrColor(
-            ctx,
-            com.google.android.material.R.attr.colorOutline
-        )
-
-        val row = LinearLayout(ctx).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(ctx, 16), dp(ctx, 16), dp(ctx, 16), dp(ctx, 16))
-        }
-
-        val header = LinearLayout(ctx).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = android.view.Gravity.CENTER_VERTICAL
-        }
-
-        val identity = LinearLayout(ctx).apply {
-            orientation = LinearLayout.VERTICAL
-        }
-
-        identity.addView(
-            tv(ctx, system, 18f, bold = true, mono = true),
-            lp()
-        )
-
-        if (!emulator.isNullOrBlank()) {
-            identity.addView(
-                tv(ctx, emulator, 12f, secondary = true, mono = true).apply {
-                    setPadding(0, dp(ctx, 3), 0, 0)
-                },
-                lp()
-            )
-        }
-
-        header.addView(
-            identity,
-            lp(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-        )
-
-        val statusBox = LinearLayout(ctx).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = android.view.Gravity.CENTER_VERTICAL
-        }
-
-        val stateDot = tv(ctx, "●", 11f, bold = true).apply {
-            setTextColor(statusColor(ctx, status.state))
-        }
-
-        statusBox.addView(
-            stateDot,
-            lp(dp(ctx, 16), ViewGroup.LayoutParams.WRAP_CONTENT)
-        )
-
-        statusBox.addView(
-            tv(ctx, status.title, 11f, bold = true, mono = true),
-            lp()
-        )
-
-        header.addView(
-            statusBox,
-            lp(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-        )
-
-        row.addView(header, lp())
-
-        row.addView(
-            tv(ctx, status.detail, 13f, secondary = true).apply {
-                setPadding(0, dp(ctx, 9), 0, 0)
-            },
-            lp()
-        )
-
-        addView(row, lp())
+    private fun glyph(title: String): String = when (title.lowercase()) {
+        "3ds" -> "3DS"
+        "ps2" -> "PS"
+        "wii" -> "Wii"
+        "gamecube" -> "GC"
+        "systems" -> "▦"
+        "cheats & sources" -> "✦"
+        "backups" -> "↺"
+        "advanced", "additional options" -> "⚙"
+        "about" -> "ⓘ"
+        "emulator" -> "▣"
+        "emulator data folder", "emulator data path", "games folder", "cheats folder", "transfer folder", "cheat storage" -> "▤"
+        else -> "›"
     }
+
+    private fun gradient(ctx: Context, a: Int, b: Int, radius: Int = 16): GradientDrawable =
+        GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(a, b)).apply {
+            cornerRadius = dp(ctx, radius).toFloat()
+        }
+
+    private fun icon(ctx: Context, title: String): TextView = TextView(ctx).apply {
+        val accent = systemAccent(title)
+        text = glyph(title)
+        gravity = android.view.Gravity.CENTER
+        textSize = if (title.length > 4 && title.lowercase() !in listOf("gamecube", "systems")) 20f else 14f
+        setTypeface(typeface, Typeface.BOLD)
+        setTextColor(Color.WHITE)
+        background = gradient(ctx, accent, 0xFF17253C.toInt(), 12)
+        contentDescription = "$title icon"
+    }
+
+    /** Clean grouped setting row; no technical detail is lost from the subtitle. */
+    fun settingsCard(ctx: Context, title: String, subtitle: String, onClick: () -> Unit): MaterialCardView =
+        MaterialCardView(ctx).apply {
+            isClickable = true
+            isFocusable = true
+            radius = dp(ctx, 14).toFloat()
+            strokeWidth = dp(ctx, 1)
+            strokeColor = OUTLINE
+            setCardBackgroundColor(SURFACE)
+            setOnClickListener { onClick() }
+
+            val row = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                setPadding(dp(ctx, 12), dp(ctx, 10), dp(ctx, 12), dp(ctx, 10))
+            }
+            row.addView(icon(ctx, title), lp(dp(ctx, 40), dp(ctx, 40)).apply {
+                rightMargin = dp(ctx, 12)
+            })
+            val texts = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+            texts.addView(tv(ctx, title, 14f, bold = true).apply { setTextColor(Color.WHITE) }, lp())
+            if (subtitle.isNotBlank()) texts.addView(tv(ctx, subtitle, 12f).apply {
+                setTextColor(MUTED)
+                maxLines = 2
+                ellipsize = android.text.TextUtils.TruncateAt.END
+                setPadding(0, dp(ctx, 3), 0, 0)
+            }, lp())
+            row.addView(texts, lp(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            row.addView(tv(ctx, "›", 23f).apply {
+                gravity = android.view.Gravity.CENTER
+                setTextColor(MUTED)
+            }, lp(dp(ctx, 22), ViewGroup.LayoutParams.WRAP_CONTENT))
+            addView(row, lp())
+        }
+
+    /** Console-coloured illustrated header, reused on the overview and each settings page. */
+    fun statusPanel(ctx: Context, system: String, status: StorageStatus, emulator: String? = null): MaterialCardView =
+        MaterialCardView(ctx).apply {
+            radius = dp(ctx, 18).toFloat()
+            strokeWidth = 0
+            val accent = systemAccent(system)
+            setCardBackgroundColor(accent)
+            val outer = LinearLayout(ctx).apply {
+                orientation = LinearLayout.VERTICAL
+                background = gradient(ctx, accent, 0xFF131D34.toInt(), 18)
+                setPadding(dp(ctx, 15), dp(ctx, 16), dp(ctx, 15), dp(ctx, 15))
+            }
+            val header = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+            }
+            header.addView(icon(ctx, system), lp(dp(ctx, 54), dp(ctx, 54)).apply {
+                rightMargin = dp(ctx, 12)
+            })
+            val identity = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+            val displayName = when (system.uppercase()) {
+                "WII" -> "Wii"
+                "GAMECUBE" -> "GameCube"
+                else -> system
+            }
+            identity.addView(tv(ctx, displayName, 19f, bold = true).apply {
+                setTextColor(Color.WHITE)
+            }, lp())
+            if (!emulator.isNullOrBlank()) identity.addView(tv(ctx, emulator, 12f).apply {
+                setTextColor(0xFFE3EAF5.toInt())
+                setPadding(0, dp(ctx, 3), 0, 0)
+            }, lp())
+            header.addView(identity, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            val statusLabel = tv(ctx, "●  ${status.title}", 11f, bold = true).apply {
+                setTextColor(Color.WHITE)
+                setPadding(dp(ctx, 9), dp(ctx, 6), dp(ctx, 9), dp(ctx, 6))
+                background = gradient(ctx, 0xAA142337.toInt(), 0xAA142337.toInt(), 12)
+                maxLines = 2
+            }
+            header.addView(statusLabel, lp(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            outer.addView(header, lp())
+            outer.addView(tv(ctx, status.detail, 12f).apply {
+                setTextColor(0xFFE3EAF5.toInt())
+                maxLines = 2
+                setPadding(0, dp(ctx, 12), 0, 0)
+            }, lp())
+            addView(outer, android.widget.FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        }
 
     private fun statusColor(ctx: Context, state: StorageState): Int =
         when (state) {
@@ -192,14 +214,41 @@ object Ui {
                 ContextCompat.getColor(ctx, android.R.color.holo_red_light)
         }
 
+    /** Dismissible, self-expiring notices used by all system pages. */
     fun banner(ctx: Context): TextView = TextView(ctx).apply {
         setPadding(dp(ctx, 14), dp(ctx, 10), dp(ctx, 14), dp(ctx, 10))
         textSize = 13f
         visibility = View.GONE
+        setCompoundDrawablesWithIntrinsicBounds(0, 0, com.breezybuilds.cheatstation.R.drawable.ic_close, 0)
+        compoundDrawablePadding = dp(ctx, 12)
+        // The entire notice is tappable, making the close action accessible on small screens.
+        setOnClickListener { hide(this) }
     }
 
-    fun show(b: TextView, kind: Kind, msg: String) { b.setBackgroundColor(kind.color); b.text = msg; b.visibility = View.VISIBLE }
-    fun hide(b: TextView) { b.visibility = View.GONE }
+    private val noticeTimers = java.util.WeakHashMap<TextView, Runnable>()
+
+    fun show(b: TextView, kind: Kind, msg: String) {
+        noticeTimers.remove(b)?.let { b.removeCallbacks(it) }
+        b.setBackgroundColor(kind.color)
+        b.text = msg
+        b.visibility = View.VISIBLE
+        val duration = when (kind) {
+            Kind.OK -> 3_000L
+            Kind.INFO -> 5_000L
+            Kind.WARN -> 8_000L
+            Kind.ERROR -> 0L // Errors remain visible until dismissed.
+        }
+        if (duration > 0) {
+            val task = Runnable { b.visibility = View.GONE; noticeTimers.remove(b) }
+            noticeTimers[b] = task
+            b.postDelayed(task, duration)
+        }
+    }
+
+    fun hide(b: TextView) {
+        noticeTimers.remove(b)?.let { b.removeCallbacks(it) }
+        b.visibility = View.GONE
+    }
 
     fun vbox(ctx: Context, pad: Int = 0): LinearLayout = LinearLayout(ctx).apply {
         orientation = LinearLayout.VERTICAL

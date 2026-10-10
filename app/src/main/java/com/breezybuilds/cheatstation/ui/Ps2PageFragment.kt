@@ -23,12 +23,12 @@ class Ps2PageFragment : Fragment() {
     private lateinit var progress: LinearProgressIndicator
     private var searchQuery = ""
     private lateinit var empty: TextView
-    private lateinit var dashboard: TextView
     private lateinit var setupStatus: TextView
     private lateinit var adapter: GameAdapter
 
     private var games: List<Game> = emptyList()
     private var busy = false
+    private val cheatCounts = mutableMapOf<String, Int>()
 
     private val app get() = requireContext().app
 
@@ -52,24 +52,6 @@ class Ps2PageFragment : Fragment() {
         banner = Ui.banner(ctx)
         root.addView(banner, Ui.lp())
 
-        dashboard = Ui.tv(
-            ctx,
-            "0 games found",
-            13f,
-            secondary = true
-        )
-        root.addView(
-            dashboard,
-            Ui.lp().apply {
-                setMargins(
-                    Ui.dp(ctx, 12),
-                    Ui.dp(ctx, 8),
-                    Ui.dp(ctx, 12),
-                    Ui.dp(ctx, 4)
-                )
-            }
-        )
-
         setupStatus = Ui.tv(ctx, "", 12f)
         setupStatus.visibility = View.GONE
         root.addView(
@@ -85,13 +67,17 @@ class Ps2PageFragment : Fragment() {
         )
 
         adapter = GameAdapter(
-            { game ->
-                listOf(
-                    game.title,
-                    "${game.productCode ?: "Serial unknown"}  •  CRC ${game.version ?: "unknown"}",
-                    "ID: ${game.titleId}",
-                    "Tap for cheats"
-                )
+            { game, showTechnicalDetails ->
+                if (showTechnicalDetails) {
+                    listOf(
+                        game.title,
+                        "${game.productCode ?: "Serial unknown"}  •  CRC ${game.version ?: "unknown"}",
+                        "ID: ${game.titleId}",
+                        cheatLabel(game)
+                    )
+                } else {
+                    listOf(game.title, cheatLabel(game))
+                }
             },
             { game ->
                 startActivity(
@@ -104,7 +90,9 @@ class Ps2PageFragment : Fragment() {
                 )
             },
             {}
-        )
+        ).apply {
+            setShowTechnicalDetails(app.settings.showTechnicalGameDetails)
+        }
 
         val list = RecyclerView(ctx).apply {
             layoutManager = LinearLayoutManager(ctx)
@@ -160,6 +148,10 @@ class Ps2PageFragment : Fragment() {
     override fun onResume() {
         super.onResume()
 
+        if (::adapter.isInitialized) {
+            adapter.setShowTechnicalDetails(app.settings.showTechnicalGameDetails)
+        }
+
         if (::setupStatus.isInitialized) {
             updateSetup()
         }
@@ -204,6 +196,39 @@ class Ps2PageFragment : Fragment() {
             "$emulatorText  •  $gamesText  •  $cheatText"
     }
 
+    private fun cheatLabel(game: Game): String {
+        val count = cheatCounts[game.titleId]
+            ?: GameCheatStatus.get(requireContext(), "ps2", game.titleId)
+        return count?.let { "$it cheats available" } ?: "Check cheats"
+    }
+
+    private fun updateCheatCounts(items: List<Game>) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            for (game in items) {
+                val id = game.titleId
+                if (cheatCounts.containsKey(id)) continue
+                val cached = GameCheatStatus.get(requireContext(), "ps2", id)
+                if (cached != null) {
+                    cheatCounts[id] = cached
+                } else {
+                    val result = withContext(Dispatchers.IO) {
+                        app.ps2Repository.cached(id) ?: app.ps2Repository.load(id)
+                    }
+                    val count = when (result) {
+                        is com.breezybuilds.cheatstation.data.CheatResult.Loaded -> result.file.cheats.size
+                        is com.breezybuilds.cheatstation.data.CheatResult.Unavailable ->
+                            if (result.kind == com.breezybuilds.cheatstation.provider.ProviderError.NOT_FOUND) 0 else null
+                    }
+                    if (count != null) {
+                        cheatCounts[id] = count
+                        GameCheatStatus.put(requireContext(), "ps2", id, count)
+                    }
+                }
+                updateAdapter()
+            }
+        }
+    }
+
     private fun filtered(): List<Game> {
         val query = searchQuery.trim()
 
@@ -220,7 +245,6 @@ class Ps2PageFragment : Fragment() {
 
         adapter.submit(filtered())
         updateEmpty()
-        refreshDashboard()
     }
 
     private fun updateEmpty() {
@@ -235,36 +259,6 @@ class Ps2PageFragment : Fragment() {
             } else {
                 "No games match your search."
             }
-    }
-
-    private fun refreshDashboard() {
-        if (!::dashboard.isInitialized) return
-
-        val total = games.size
-
-        lifecycleScope.launch {
-            val available = withContext(Dispatchers.IO) {
-                var count = 0
-
-                for (game in games) {
-                    try {
-                        app.ps2Repository.cached(game.titleId)?.let {
-                            count += it.file.cheats.size
-                        }
-                    } catch (_: Exception) {
-                    }
-                }
-
-                count
-            }
-
-            if (!isAdded || !::dashboard.isInitialized) {
-                return@launch
-            }
-
-            dashboard.text =
-                "$total games found"
-        }
     }
 
     fun rescanGames() { scan() }
@@ -312,6 +306,7 @@ class Ps2PageFragment : Fragment() {
                 games = result.games
 
                 updateAdapter()
+                updateCheatCounts(result.games)
                 updateSetup()
 
                 if (result.warnings.isNotEmpty()) {
