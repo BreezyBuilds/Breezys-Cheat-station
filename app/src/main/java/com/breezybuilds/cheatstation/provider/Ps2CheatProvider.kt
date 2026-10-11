@@ -14,10 +14,11 @@ class Ps2CheatProvider(private val source: Ps2CheatSource, private val http: Htt
         val r = try { http.get(url) } catch (e: IOException) {
             throw ProviderException(ProviderError.OFFLINE, "Can't reach the PS2 cheat source. Check your internet connection and try again.")
         }
-        when (r.code) {
-            404 -> throw ProviderException(ProviderError.NOT_FOUND, "No PS2 cheats were found for this game in ${source.name}.")
-            429 -> throw ProviderException(ProviderError.RATE_LIMITED, "The PS2 cheat source is rate limiting requests. Try again later.")
-            in 200..299 -> return r
+        when {
+            r.code == 404 -> throw ProviderException(ProviderError.NOT_FOUND, "No PS2 cheats were found for this game in ${source.name}.")
+            r.code == 429 || (r.code == 403 && r.headers["x-ratelimit-remaining"] == "0") ->
+                throw ProviderException(ProviderError.RATE_LIMITED, "GitHub is limiting PS2 source requests. Try again later.")
+            r.code in 200..299 -> return r
             else -> throw ProviderException(ProviderError.HTTP, "The PS2 cheat source returned HTTP ${r.code}.")
         }
     }
@@ -37,10 +38,15 @@ class Ps2CheatProvider(private val source: Ps2CheatSource, private val http: Htt
         val r = try { http.get(api, mapOf("Accept" to "application/vnd.github+json")) } catch (e: IOException) {
             throw ProviderException(ProviderError.OFFLINE, "Can't reach the PS2 cheat source.")
         }
+        if (r.code == 429 || (r.code == 403 && r.headers["x-ratelimit-remaining"] == "0"))
+            throw ProviderException(ProviderError.RATE_LIMITED, "GitHub is limiting PS2 source indexing. Try again later.")
         if (r.code !in 200..299) throw ProviderException(ProviderError.HTTP, "Could not read the PS2 cheat source index (HTTP ${r.code}).")
         val out = HashSet<String>()
         try {
-            val tree = JSONObject(r.body).getJSONArray("tree")
+            val index = JSONObject(r.body)
+            if (index.optBoolean("truncated"))
+                throw ProviderException(ProviderError.INVALID, "GitHub returned an incomplete PS2 source index. Availability cannot be determined reliably.")
+            val tree = index.getJSONArray("tree")
             val prefix = source.path.trim('/').let { if (it.isEmpty()) "" else "$it/" }
             val rx = Regex("^([A-Za-z0-9-]+_[0-9A-Fa-f]{8})\\.pnach$")
             for (i in 0 until tree.length()) {
@@ -53,6 +59,8 @@ class Ps2CheatProvider(private val source: Ps2CheatSource, private val http: Htt
                 rx.matchEntire(name)?.let { out += it.groupValues[1].uppercase() }
             }
             out
+        } catch (e: ProviderException) {
+            throw e
         } catch (e: Exception) {
             AppLog.e("PS2", "Could not parse source index", e)
             throw ProviderException(ProviderError.INVALID, "The PS2 cheat source returned an unexpected index format.")

@@ -58,7 +58,10 @@ class GitHubCheatProvider(
         config.token?.takeIf { it.isNotBlank() }?.let { headers["Authorization"] = "Bearer $it" }
         val r = call(config.treeUrl(), headers)
         try {
-            val tree = JSONObject(r.body).getJSONArray("tree")
+            val index = JSONObject(r.body)
+            if (index.optBoolean("truncated"))
+                throw ProviderException(ProviderError.INVALID, "GitHub returned an incomplete 3DS source index. Availability cannot be determined reliably.")
+            val tree = index.getJSONArray("tree")
             val prefix = config.basePath.trim('/').let { if (it.isEmpty()) "" else "$it/" }
             val rx = config.fileNameRegex()
             val out = HashSet<String>()
@@ -71,8 +74,9 @@ class GitHubCheatProvider(
                 if (name.contains('/')) continue
                 rx.matchEntire(name)?.let { out += it.groupValues[1].uppercase() }
             }
-            if (JSONObject(r.body).optBoolean("truncated")) AppLog.w("GitHub", "Repository listing was truncated by GitHub")
             out
+        } catch (e: ProviderException) {
+            throw e
         } catch (e: Exception) {
             throw ProviderException(ProviderError.INVALID, "The cheat source returned data in an unexpected format.")
         }
