@@ -2,7 +2,7 @@ name: Build APK
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, feature/retro-loader-v1.0]
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
