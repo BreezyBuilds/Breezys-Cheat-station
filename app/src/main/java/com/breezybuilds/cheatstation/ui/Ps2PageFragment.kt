@@ -31,6 +31,7 @@ class Ps2PageFragment : Fragment() {
     private var games: List<Game> = emptyList()
     private var busy = false
     private val cheatCounts = mutableMapOf<String, Int>()
+    private var forceRefreshCounts = false
 
     private val app get() = requireContext().app
 
@@ -133,6 +134,8 @@ class Ps2PageFragment : Fragment() {
 
         if (::adapter.isInitialized) {
             adapter.setShowTechnicalDetails(app.settings.showTechnicalGameDetails)
+            cheatCounts.clear()
+            updateCheatCounts(games)
         }
 
         if (::setupStatus.isInitialized) {
@@ -185,17 +188,17 @@ class Ps2PageFragment : Fragment() {
         return count?.let { "$it cheats available" } ?: "Check cheats"
     }
 
-    private fun updateCheatCounts(items: List<Game>) {
+    private fun updateCheatCounts(items: List<Game>, useSavedCounts: Boolean = true) {
         viewLifecycleOwner.lifecycleScope.launch {
             for (game in items) {
                 val id = game.titleId
                 if (cheatCounts.containsKey(id)) continue
-                val cached = GameCheatStatus.get(requireContext(), "ps2", id)
+                val cached = if (useSavedCounts) GameCheatStatus.get(requireContext(), "ps2", id) else null
                 if (cached != null) {
                     cheatCounts[id] = cached
                 } else {
                     val result = withContext(Dispatchers.IO) {
-                        app.ps2Repository.cached(id) ?: app.ps2Repository.load(id)
+                        if (useSavedCounts) app.ps2Repository.cached(id) ?: app.ps2Repository.load(id) else app.ps2Repository.load(id)
                     }
                     val count = when (result) {
                         is com.breezybuilds.cheatstation.data.CheatResult.Loaded -> result.file.cheats.size
@@ -252,7 +255,7 @@ class Ps2PageFragment : Fragment() {
         UniversalRoms.scanMode(requireContext()).name
     ).joinToString("|")
 
-    fun rescanGames() { scan() }
+    fun rescanGames() { forceRefreshCounts = true; scan() }
 
     fun setSearchQuery(query: String) {
         searchQuery = query
@@ -296,7 +299,12 @@ class Ps2PageFragment : Fragment() {
                 }
 
                 updateAdapter()
-                updateCheatCounts(result.games)
+                if (result.error == null) {
+                    val force = forceRefreshCounts
+                    forceRefreshCounts = false
+                    if (force) cheatCounts.clear()
+                    updateCheatCounts(result.games, useSavedCounts = !force)
+                }
                 updateSetup()
 
                 if (result.warnings.isNotEmpty()) {

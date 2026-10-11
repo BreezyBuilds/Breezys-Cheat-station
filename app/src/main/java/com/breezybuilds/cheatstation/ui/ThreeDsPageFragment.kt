@@ -127,7 +127,7 @@ class ThreeDsPageFragment : Fragment() {
         }
     }
 
-    fun rescanGames() { scan() }
+    fun rescanGames() { availableCounts.clear(); scan() }
 
     fun setSearchQuery(query: String) {
         searchQuery = query
@@ -304,7 +304,6 @@ class ThreeDsPageFragment : Fragment() {
 
             availableCounts.clear()
             availableCounts.putAll(avail)
-            avail.forEach { (id, count) -> GameCheatStatus.put(requireContext(), "3ds", id, count) }
             avail.forEach { (id, count) -> GameCheatStatus.put(requireContext(), "3ds", id, count) }
 
             adapter.notifyDataSetChanged()

@@ -32,6 +32,7 @@ class DolphinPageFragment(
     private lateinit var recycler: RecyclerView
     private lateinit var adapter: DolphinGameAdapter
     private val cheatCounts = mutableMapOf<String, Int>()
+    private var forceRefreshCounts = false
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -88,6 +89,8 @@ class DolphinPageFragment(
             adapter.setShowTechnicalDetails(
                 (requireActivity().application as App).settings.showTechnicalGameDetails
             )
+            cheatCounts.clear()
+            updateCheatCounts((requireActivity().application as App).cache.loadSystemGames(cacheKey()))
         }
     }
 
@@ -105,6 +108,7 @@ class DolphinPageFragment(
     }
 
     fun rescanGames() {
+        forceRefreshCounts = true
         scan()
     }
 
@@ -121,13 +125,13 @@ class DolphinPageFragment(
     }
 
 
-    private fun updateCheatCounts(items: List<Game>) {
+    private fun updateCheatCounts(items: List<Game>, useSavedCounts: Boolean = true) {
         viewLifecycleOwner.lifecycleScope.launch {
             val application = requireActivity().application as App
             for (game in items) {
                 val id = game.titleId
                 if (cheatCounts.containsKey(id)) continue
-                val cached = GameCheatStatus.get(requireContext(), platform.name, id)
+                val cached = if (useSavedCounts) GameCheatStatus.get(requireContext(), platform.name, id) else null
                 if (cached != null) {
                     cheatCounts[id] = cached
                 } else {
@@ -174,7 +178,10 @@ class DolphinPageFragment(
                 application.cache.saveSystemGames(cacheKey(), result.games)
                 LibraryRefresh.scanned(requireContext(), cacheKey(), gamesSignature())
                 adapter.submitList(result.games)
-                updateCheatCounts(result.games)
+                val force = forceRefreshCounts
+                forceRefreshCounts = false
+                if (force) cheatCounts.clear()
+                updateCheatCounts(result.games, useSavedCounts = !force)
             }
 
             scanning = false
