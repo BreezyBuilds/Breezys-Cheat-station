@@ -41,6 +41,10 @@ class CheatRepository(private val cache: CacheStore, private val providers: () -
     }
 
     suspend fun load(titleId: String): CheatResult {
+        if (providers().isEmpty()) {
+            return CheatResult.Unavailable(
+                "No cheat repositories are enabled. Select at least one source in Cheats & Sources.")
+        }
         var lastError: ProviderException? = null
         var liveSources = 0
         var failedSources = 0
@@ -68,6 +72,18 @@ class CheatRepository(private val cache: CacheStore, private val providers: () -
             } catch (e: Exception) {
                 failedSources++
                 AppLog.e("Repo", "Unexpected error from ${provider.displayName}", e)
+                // Network and parser failures should not discard valid per-source cached cheats.
+                cache.loadCheats(provider.id, titleId)?.let { saved ->
+                    try {
+                        val parsed = CheatParser.parse(saved.text, titleId)
+                        if (parsed.cheats.isNotEmpty()) {
+                            usedCachedFallback = true
+                            results.add(Triple(provider.displayName, parsed, saved.fetchedAt))
+                        }
+                    } catch (cacheError: Exception) {
+                        AppLog.e("Repo", "Could not parse cached cheats from ${provider.displayName}", cacheError)
+                    }
+                }
             }
         }
         if (results.isNotEmpty()) {

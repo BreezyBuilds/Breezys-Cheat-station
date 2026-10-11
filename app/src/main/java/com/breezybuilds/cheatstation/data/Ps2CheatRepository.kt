@@ -38,6 +38,10 @@ class Ps2CheatRepository(
     }
 
     suspend fun load(key: String): CheatResult {
+        if (providers().isEmpty()) {
+            return CheatResult.Unavailable(
+                "No cheat repositories are enabled. Select at least one source in Cheats & Sources.")
+        }
         var lastError: ProviderException? = null
         var liveSources = 0
         var failedSources = 0
@@ -64,6 +68,18 @@ class Ps2CheatRepository(
             } catch (e: Exception) {
                 failedSources++
                 AppLog.e("PS2Repo", "Unexpected error from ${provider.displayName}", e)
+                // Network and parser failures should not discard valid per-source cached cheats.
+                cache.loadCheats(provider.id, key)?.let { saved ->
+                    try {
+                        val parsed = PnachParser.parse(saved.text, key)
+                        if (parsed.cheats.isNotEmpty()) {
+                            usedCachedFallback = true
+                            found.add(Triple(provider.displayName, parsed, saved.fetchedAt))
+                        }
+                    } catch (cacheError: Exception) {
+                        AppLog.e("PS2Repo", "Could not parse cached cheats from ${provider.displayName}", cacheError)
+                    }
+                }
             }
         }
         if (found.isNotEmpty()) return CheatResult.Loaded(
