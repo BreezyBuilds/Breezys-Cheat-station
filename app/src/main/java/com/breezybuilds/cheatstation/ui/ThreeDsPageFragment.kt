@@ -363,9 +363,10 @@ class ThreeDsPageFragment : Fragment() {
 
         if (!showTechnicalDetails) {
             val conciseStatus = when {
+                updatingCheats || refreshCheatsAfterScan -> "Scanning cheats…"
                 avail.contains("No cheats") -> "No cheats found"
                 avail.contains("available") -> avail
-                else -> "Tap to check cheats"
+                else -> "Check cheats"
             }
             return listOf(g.title, conciseStatus)
         }
