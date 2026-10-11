@@ -134,6 +134,7 @@ class ThreeDsPageFragment : Fragment() {
         if (busy) return
         refreshCheatsAfterScan = true
         availableCounts.clear()
+        if (::adapter.isInitialized) adapter.notifyDataSetChanged()
         scan()
     }
 
@@ -330,7 +331,9 @@ class ThreeDsPageFragment : Fragment() {
             append("  •  Version: ${g.version ?: "unverified"}")
         }
 
-        val avail =
+        val avail = if (updatingCheats || refreshCheatsAfterScan) {
+            "Scanning cheats…"
+        } else
             (availableCounts[g.titleId] ?: GameCheatStatus.get(requireContext(), "3ds", g.titleId))?.let {
                 "$it cheats available"
             }
@@ -503,6 +506,7 @@ class ThreeDsPageFragment : Fragment() {
 
         busy = true
         updatingCheats = true
+        if (::adapter.isInitialized) adapter.notifyDataSetChanged()
         rebuild()
         progress.visibility = View.GONE
 
@@ -522,6 +526,7 @@ class ThreeDsPageFragment : Fragment() {
 
             busy = false
             updatingCheats = false
+            if (::adapter.isInitialized) adapter.notifyDataSetChanged()
             progress.visibility = View.GONE
             rebuild()
 
