@@ -662,7 +662,7 @@ class SettingsActivity : AppCompatActivity() {
         }
         subsection("DATABASE & UPDATES")
         line("Cached cheat data: ${app.cache.cheatDataSize() / 1024} KB", true)
-        line("Refresh the 3DS database from its system-specific source settings.", true)
+        line("Open a system above to refresh its cheats using its selected repositories.", true)
         card("Clear downloaded cheat cache", "Remove cached searches without touching installed emulator cheats") {
             MaterialAlertDialogBuilder(this).setTitle("Clear cached cheat data?")
                 .setMessage("Downloaded cheat lists are removed from this app. Installed cheats are not touched.")
@@ -711,10 +711,8 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
         subsection("CHEAT DATABASE")
-        if (cheatSystem == "3DS") {
-            card("Refresh 3DS database", "Update the cheat index using selected sources") { refreshNow() }
-        } else {
-            line("Game-specific cheats are checked when you open a game.", true)
+        card("Refresh cheat database", "Check ${cheatSystem} games against enabled repositories") {
+            refreshSystemCheats(cheatSystem)
         }
         line("Cached cheat data: ${app.cache.cheatDataSize() / 1024} KB", true)
         if (cheatSystem == "PS2") {
@@ -1185,6 +1183,73 @@ class SettingsActivity : AppCompatActivity() {
             }
             Ps2Settings(this).addCustomSource(source)
             dialog.dismiss(); render(); note(Ui.Kind.OK, "Custom PS2 repository saved and enabled.")
+        }
+    }
+
+    /** Refresh each system independently; do not silently treat a failed request as a successful refresh. */
+    private fun refreshSystemCheats(system: String) {
+        if (system == "3DS") { refreshNow(); return }
+        val cacheKey = when (system) {
+            "PS2" -> "PS2"
+            "Wii" -> "WII"
+            "GameCube" -> "GAMECUBE"
+            else -> return
+        }
+        val games = app.cache.loadSystemGames(cacheKey).distinctBy { it.titleId }
+        if (games.isEmpty()) {
+            note(Ui.Kind.WARN, "No $system games have been scanned. Scan your game library first.")
+            return
+        }
+        val selected = if (system == "PS2") Ps2Settings(this).sources().size
+                       else app.dolphinSettings.sources().size
+        if (selected == 0) {
+            note(Ui.Kind.WARN, "Enable at least one $system repository before refreshing.")
+            return
+        }
+        note(Ui.Kind.INFO, "Refreshing $system cheats for ${games.size} games…")
+        lifecycleScope.launch {
+            var found = 0
+            var missing = 0
+            var failed = 0
+            withContext(Dispatchers.IO) {
+                val dolphin = if (system == "PS2") null else
+                    com.breezybuilds.cheatstation.provider.DolphinCheatProvider({ app.dolphinSettings.sources() })
+                games.forEachIndexed { index, game ->
+                    try {
+                        if (system == "PS2") {
+                            when (val result = app.ps2Repository.load(game.titleId)) {
+                                is com.breezybuilds.cheatstation.data.CheatResult.Loaded -> {
+                                    if (result.fromCache) failed++ else found++
+                                }
+                                is com.breezybuilds.cheatstation.data.CheatResult.Unavailable -> {
+                                    if (result.kind == com.breezybuilds.cheatstation.provider.ProviderError.NOT_FOUND ||
+                                        result.kind == null && result.message.startsWith("No PS2 cheats")) missing++
+                                    else failed++
+                                }
+                            }
+                        } else {
+                            val count = dolphin!!.fetch(game.titleId).cheats.size
+                            com.breezybuilds.cheatstation.ui.GameCheatStatus.put(this@SettingsActivity, cacheKey, game.titleId, count)
+                            if (count > 0) found++ else missing++
+                        }
+                    } catch (e: com.breezybuilds.cheatstation.provider.ProviderException) {
+                        if (e.kind == com.breezybuilds.cheatstation.provider.ProviderError.NOT_FOUND) {
+                            missing++
+                            if (system != "PS2") com.breezybuilds.cheatstation.ui.GameCheatStatus.put(this@SettingsActivity, cacheKey, game.titleId, 0)
+                        } else failed++
+                    } catch (e: Exception) {
+                        failed++
+                        AppLog.e("CheatRefresh", "$system: ${game.titleId} refresh failed", e)
+                    }
+                    if ((index + 1) % 5 == 0 || index + 1 == games.size) {
+                        withContext(Dispatchers.Main) {
+                            note(Ui.Kind.INFO, "$system: checked ${index + 1}/${games.size} games…")
+                        }
+                    }
+                }
+            }
+            note(if (failed == 0) Ui.Kind.OK else Ui.Kind.WARN,
+                "$system refresh complete: $found with cheats, $missing not found, $failed failed. Checked ${games.size} games.")
         }
     }
 
