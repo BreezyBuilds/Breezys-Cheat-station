@@ -127,7 +127,15 @@ class ThreeDsPageFragment : Fragment() {
         }
     }
 
-    fun rescanGames() { availableCounts.clear(); scan() }
+    private var refreshCheatsAfterScan = false
+    private var updatingCheats = false
+
+    fun rescanGames() {
+        if (busy) return
+        refreshCheatsAfterScan = true
+        availableCounts.clear()
+        scan()
+    }
 
     fun setSearchQuery(query: String) {
         searchQuery = query
@@ -207,8 +215,14 @@ class ThreeDsPageFragment : Fragment() {
                 }
             }
 
-            loadCounts()
-            maybeAutoUpdate()
+            if (res.error == null && refreshCheatsAfterScan) {
+                refreshCheatsAfterScan = false
+                refreshDatabase()
+            } else {
+                refreshCheatsAfterScan = false
+                loadCounts()
+                maybeAutoUpdate()
+            }
         }
     }
 
@@ -476,7 +490,7 @@ class ThreeDsPageFragment : Fragment() {
     }
 
     private fun refreshDatabase() {
-        if (busy) return
+        if (busy || updatingCheats) return
 
         if (all.isEmpty()) {
             Ui.show(
@@ -488,6 +502,7 @@ class ThreeDsPageFragment : Fragment() {
         }
 
         busy = true
+        updatingCheats = true
         rebuild()
         progress.visibility = View.GONE
 
@@ -506,6 +521,7 @@ class ThreeDsPageFragment : Fragment() {
             }
 
             busy = false
+            updatingCheats = false
             progress.visibility = View.GONE
             rebuild()
 

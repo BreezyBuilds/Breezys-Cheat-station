@@ -139,8 +139,10 @@ class Ps2PageFragment : Fragment() {
         if (::adapter.isInitialized) {
             adapter.setShowTechnicalDetails(app.settings.showTechnicalGameDetails)
             // The details activity writes the authoritative merged count when it finishes.
-            cheatCounts.clear()
-            updateCheatCounts(games)
+            if (countJob?.isActive != true) {
+                cheatCounts.clear()
+                updateCheatCounts(games)
+            }
             updateAdapter()
         }
 
@@ -191,7 +193,8 @@ class Ps2PageFragment : Fragment() {
     private fun cheatLabel(game: Game): String {
         val count = cheatCounts[game.titleId]
             ?: GameCheatStatus.get(requireContext(), "ps2", game.titleId)
-        return count?.let { "$it cheats available" }
+        return if (game.titleId in checkingCounts) "Scanning cheats…"
+            else count?.let { "$it cheats available" }
             ?: if (game.titleId in checkingCounts) "Scanning cheats…"
             else if (game.titleId in failedCounts) "Unable to check cheats" else "Check cheats"
     }
@@ -276,6 +279,8 @@ class Ps2PageFragment : Fragment() {
         cheatCounts.clear()
         // Remove stale labels immediately, including the persistent 7-day summaries.
         games.forEach { GameCheatStatus.remove(requireContext(), "ps2", it.titleId) }
+        checkingCounts.clear()
+        checkingCounts.addAll(games.map { it.titleId })
         updateAdapter()
         scan()
     }

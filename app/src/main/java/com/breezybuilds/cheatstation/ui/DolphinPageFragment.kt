@@ -18,6 +18,7 @@ import com.breezybuilds.cheatstation.scan.DolphinPlatform
 import com.breezybuilds.cheatstation.provider.DolphinCheatProvider
 import com.breezybuilds.cheatstation.provider.ProviderException
 import com.breezybuilds.cheatstation.provider.ProviderError
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -34,6 +35,8 @@ class DolphinPageFragment(
     private val cheatCounts = mutableMapOf<String, Int>()
     private val checkingCounts = mutableSetOf<String>()
     private val failedCounts = mutableSetOf<String>()
+    private var countJob: Job? = null
+    private var forceRefreshCounts = false
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -91,6 +94,10 @@ class DolphinPageFragment(
             adapter.setShowTechnicalDetails(
                 (requireActivity().application as App).settings.showTechnicalGameDetails
             )
+            if (countJob?.isActive != true) {
+                cheatCounts.clear()
+                updateCheatCounts((requireActivity().application as App).cache.loadSystemGames(cacheKey()))
+            }
         }
     }
 
@@ -108,6 +115,16 @@ class DolphinPageFragment(
     }
 
     fun rescanGames() {
+        forceRefreshCounts = true
+        countJob?.cancel()
+        cheatCounts.clear()
+        failedCounts.clear()
+        val application = requireActivity().application as App
+        val saved = application.cache.loadSystemGames(cacheKey())
+        saved.forEach { GameCheatStatus.remove(requireContext(), platform.name, it.titleId) }
+        checkingCounts.clear()
+        checkingCounts.addAll(saved.map { it.titleId })
+        adapter.notifyDataSetChanged()
         scan()
     }
 
@@ -124,17 +141,18 @@ class DolphinPageFragment(
     }
 
 
-    private fun updateCheatCounts(items: List<Game>) {
+    private fun updateCheatCounts(items: List<Game>, useSavedCounts: Boolean = true) {
+        countJob?.cancel()
         checkingCounts.clear()
         failedCounts.clear()
-        checkingCounts.addAll(items.map { it.titleId }.filter { !cheatCounts.containsKey(it) && GameCheatStatus.get(requireContext(), platform.name, it) == null })
+        checkingCounts.addAll(items.map { it.titleId }.filter { !cheatCounts.containsKey(it) && (!useSavedCounts || GameCheatStatus.get(requireContext(), platform.name, it) == null) })
         adapter.notifyDataSetChanged()
-        viewLifecycleOwner.lifecycleScope.launch {
+        countJob = viewLifecycleOwner.lifecycleScope.launch {
             val application = requireActivity().application as App
             for (game in items) {
                 val id = game.titleId
                 if (cheatCounts.containsKey(id)) continue
-                val cached = GameCheatStatus.get(requireContext(), platform.name, id)
+                val cached = if (useSavedCounts) GameCheatStatus.get(requireContext(), platform.name, id) else null
                 if (cached != null) {
                     cheatCounts[id] = cached
                 } else {
@@ -158,6 +176,7 @@ class DolphinPageFragment(
     }
 
     private fun scan() {
+        if (scanning) return
         scanning = true
         updateEmptyState(adapter.itemCount)
         status.text = when (platform) {
@@ -183,7 +202,10 @@ class DolphinPageFragment(
                 application.cache.saveSystemGames(cacheKey(), result.games)
                 LibraryRefresh.scanned(requireContext(), cacheKey(), gamesSignature())
                 adapter.submitList(result.games)
-                updateCheatCounts(result.games)
+                val force = forceRefreshCounts
+                forceRefreshCounts = false
+                if (force) cheatCounts.clear()
+                updateCheatCounts(result.games, useSavedCounts = !force)
             }
 
             scanning = false
