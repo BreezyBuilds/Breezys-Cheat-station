@@ -32,8 +32,8 @@ class DolphinGameScanner(
         progress: (String) -> Unit = {}
     ): ScanResult {
         val root = when (platform) {
-            DolphinPlatform.WII -> storage.wiiGamesDoc()
-            DolphinPlatform.GAMECUBE -> storage.gameCubeGamesDoc()
+            DolphinPlatform.WII -> storage.wiiGamesDoc() ?: com.breezybuilds.cheatstation.emulator.UniversalRoms.systemFolder(ctx, "Wii")
+            DolphinPlatform.GAMECUBE -> storage.gameCubeGamesDoc() ?: com.breezybuilds.cheatstation.emulator.UniversalRoms.systemFolder(ctx, "GameCube")
         } ?: return ScanResult(
             games = emptyList(),
             warnings = emptyList(),
@@ -56,13 +56,24 @@ class DolphinGameScanner(
                 "Scanning GameCube games…"
         )
 
-        collect(
-            root = root,
-            depth = 0,
-            games = games,
-            warnings = warnings,
-            progress = progress
-        )
+        // Onboarding already enumerated these SAF URIs. Reuse that manifest instead of
+        // traversing the same large folder tree a second time when no override is set.
+        val hasOverride = when (platform) {
+            DolphinPlatform.WII -> storage.wiiGamesUri != null
+            DolphinPlatform.GAMECUBE -> storage.gameCubeGamesUri != null
+        }
+        val discovered = if (!hasOverride) com.breezybuilds.cheatstation.emulator.UniversalRoms.loadDiscovered(ctx,
+            if (platform == DolphinPlatform.WII) "Wii" else "GameCube") else emptyList()
+        if (discovered.isNotEmpty()) {
+            progress("Identifying ${discovered.size} discovered game files…")
+            discovered.forEachIndexed { index, entry ->
+                val file = DocumentFile.fromSingleUri(ctx, android.net.Uri.parse(entry.uri))
+                if (file != null) collect(file, 0, games, warnings, progress)
+                if ((index + 1) % 5 == 0) progress("Identifying ${index + 1} of ${discovered.size} game files…")
+            }
+        } else {
+            collect(root = root, depth = 0, games = games, warnings = warnings, progress = progress)
+        }
 
         AppLog.i(
             "DolphinScan",
@@ -84,7 +95,7 @@ class DolphinGameScanner(
         warnings: MutableList<String>,
         progress: (String) -> Unit
     ) {
-        for (file in root.listFiles()) {
+        for (file in if (root.isFile) arrayOf(root) else root.listFiles()) {
 
             if (file.isDirectory) {
                 if (depth < 4) {

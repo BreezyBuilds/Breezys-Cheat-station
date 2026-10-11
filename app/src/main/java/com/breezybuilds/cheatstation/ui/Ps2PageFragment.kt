@@ -11,6 +11,8 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.breezybuilds.cheatstation.app
 import com.breezybuilds.cheatstation.model.Game
+import com.breezybuilds.cheatstation.emulator.LibraryRefresh
+import com.breezybuilds.cheatstation.emulator.UniversalRoms
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.progressindicator.LinearProgressIndicator
 import kotlinx.coroutines.Dispatchers
@@ -22,7 +24,7 @@ class Ps2PageFragment : Fragment() {
     private lateinit var banner: TextView
     private lateinit var progress: LinearProgressIndicator
     private var searchQuery = ""
-    private lateinit var empty: TextView
+    private lateinit var empty: LibraryEmptyState
     private lateinit var setupStatus: TextView
     private lateinit var adapter: GameAdapter
 
@@ -99,35 +101,12 @@ class Ps2PageFragment : Fragment() {
             adapter = this@Ps2PageFragment.adapter
         }
 
-        root.addView(
-            list,
-            Ui.lp(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                0,
-                1f
-            )
-        )
-
-        empty = Ui.tv(
-            ctx,
-            "No PS2 games found.",
-            15f,
-            secondary = true
-        )
-
+        empty = LibraryEmptyState(ctx)
         empty.visibility = View.GONE
-
-        root.addView(
-            empty,
-            Ui.lp().apply {
-                setMargins(
-                    Ui.dp(ctx, 16),
-                    Ui.dp(ctx, 12),
-                    Ui.dp(ctx, 16),
-                    Ui.dp(ctx, 12)
-                )
-            }
-        )
+        val libraryArea = android.widget.FrameLayout(ctx)
+        libraryArea.addView(list, android.widget.FrameLayout.LayoutParams(-1, -1))
+        libraryArea.addView(empty, android.widget.FrameLayout.LayoutParams(-1, -2, android.view.Gravity.CENTER))
+        root.addView(libraryArea, Ui.lp(-1, 0, 1f))
 
         return root
     }
@@ -140,8 +119,12 @@ class Ps2PageFragment : Fragment() {
 
         updateSetup()
 
-        if (app.ps2Storage.gamesDoc() != null) {
+        games = app.cache.loadSystemGames("PS2")
+        updateAdapter()
+        if (LibraryRefresh.needsScan(requireContext(), "PS2", gamesSignature(), app.cache.hasSystemGames("PS2"))) {
             scan()
+        } else if (games.isNotEmpty()) {
+            updateCheatCounts(games)
         }
     }
 
@@ -158,8 +141,8 @@ class Ps2PageFragment : Fragment() {
 
         if (
             ::adapter.isInitialized &&
-            app.ps2Storage.gamesDoc() != null &&
-            games.isEmpty()
+            !app.cache.hasSystemGames("PS2") &&
+            app.ps2Storage.gamesDoc() != null
         ) {
             scan()
         }
@@ -254,12 +237,20 @@ class Ps2PageFragment : Fragment() {
             if (filtered().isEmpty()) View.VISIBLE else View.GONE
 
         empty.text =
-            if (games.isEmpty()) {
-                "No PS2 games found.\n\nConfigure your PS2 games folder in Settings."
+            if (games.isEmpty() && busy) {
+                "Scanning PS2 games… Your library is being checked."
+            } else if (games.isEmpty()) {
+                "No saved PS2 games yet. Use Rescan games to check your library."
             } else {
                 "No games match your search."
             }
     }
+
+    private fun gamesSignature(): String = listOf(
+        app.ps2Storage.gamesUri?.toString().orEmpty(),
+        UniversalRoms.uri(requireContext())?.toString().orEmpty(),
+        UniversalRoms.scanMode(requireContext()).name
+    ).joinToString("|")
 
     fun rescanGames() { scan() }
 
@@ -273,37 +264,36 @@ class Ps2PageFragment : Fragment() {
     private fun scan() {
         if (busy) return
 
-        if (app.ps2Storage.gamesDoc() == null) {
+        // The scanner resolves manual or universal folders on its IO worker.
+        if (app.ps2Storage.gamesUri == null && UniversalRoms.uri(requireContext()) == null) {
             updateSetup()
             return
         }
 
         busy = true
-        progress.visibility = View.VISIBLE
+        updateEmpty()
+        progress.visibility = View.GONE
 
-        Ui.show(
-            banner,
-            Ui.Kind.INFO,
-            "Scanning PS2 games…"
-        )
+        banner.visibility = View.GONE
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val result = withContext(Dispatchers.IO) {
                     app.ps2Scanner.scan { message ->
                         requireActivity().runOnUiThread {
-                            if (::banner.isInitialized) {
-                                Ui.show(
-                                    banner,
-                                    Ui.Kind.INFO,
-                                    message
-                                )
+                            if (::empty.isInitialized && games.isEmpty()) {
+                                empty.showProgress("Discovering PS2 games", message)
                             }
                         }
                     }
                 }
 
-                games = result.games
+                // Keep the last good library if the scan reports an error.
+                if (result.error == null) {
+                    games = result.games
+                    app.cache.saveSystemGames("PS2", games)
+                    LibraryRefresh.scanned(requireContext(), "PS2", gamesSignature())
+                }
 
                 updateAdapter()
                 updateCheatCounts(result.games)
@@ -326,6 +316,7 @@ class Ps2PageFragment : Fragment() {
                 )
             } finally {
                 busy = false
+                updateEmpty()
                 progress.visibility = View.GONE
             }
         }

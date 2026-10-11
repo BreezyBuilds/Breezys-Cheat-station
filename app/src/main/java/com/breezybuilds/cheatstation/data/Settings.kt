@@ -37,5 +37,18 @@ class Settings(ctx: Context) {
         putString("src_path", c.basePath.trim()); putString("src_pattern", c.fileNamePattern.trim()); putString("src_token", c.token?.trim())
     }
 
+    /** Empty selection is prevented by the UI. Older installs retain their chosen source. */
+    fun sources(): List<CheatSourceConfig> {
+        val available = com.breezybuilds.cheatstation.provider.RecommendedCheatSources.all.map { it.config }
+        val ids = p.getStringSet("enabled_3ds_sources", null)
+        return if (ids == null) listOf(source()) else available.filter { it.id in ids }.ifEmpty { listOf(source()) }
+    }
+
+    fun saveSources(sources: List<CheatSourceConfig>) {
+        require(sources.isNotEmpty())
+        p.edit { putStringSet("enabled_3ds_sources", sources.map { it.id }.toSet()) }
+        saveSource(sources.first())
+    }
+
     fun resetSource() = p.edit { remove("src_owner"); remove("src_repo"); remove("src_branch"); remove("src_path"); remove("src_pattern"); remove("src_token") }
 }

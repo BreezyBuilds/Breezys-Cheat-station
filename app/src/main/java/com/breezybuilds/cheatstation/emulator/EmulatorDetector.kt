@@ -14,7 +14,7 @@ object EmulatorDetector {
         "Azahar" to "org.azahar_emu.azahar",
         "Citra" to "org.citra.citra_emu",
         "Citra" to "org.citra.citra",
-        "Azahar" to "io.github.lime3ds.android",
+        "Lime3DS" to "io.github.lime3ds.android",
         "Lime3DS" to "org.lime3ds.android"
     )
 

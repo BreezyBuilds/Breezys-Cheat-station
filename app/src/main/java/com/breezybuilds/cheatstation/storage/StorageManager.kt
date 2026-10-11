@@ -105,7 +105,8 @@ class StorageManager(private val ctx: Context) {
 
     fun rootDoc(): DocumentFile? =
         selected3dsRootDoc()
-            ?: autoDetect3dsFolder()?.let { DocumentFile.fromFile(it) }
+            ?: autoDetect3dsFolder()?.takeIf { it.canRead() && it.canWrite() }
+                ?.let { DocumentFile.fromFile(it) }
 
     /** Common markers found in 3DS emulator data/user folders. */
     private val markers = listOf("sdmc", "nand", "config", "cheats", "sysdata", "log", "states", "shaders")
@@ -315,10 +316,11 @@ class StorageManager(private val ctx: Context) {
             return StorageState.ACCESSIBLE
         }
 
-        return if (autoDetect3dsFolder() != null) {
-            StorageState.PERMISSION_REQUIRED
-        } else {
-            StorageState.DETECTED
+        val detectedFolder = autoDetect3dsFolder()
+        return when {
+            detectedFolder == null -> StorageState.DETECTED
+            detectedFolder.canRead() && detectedFolder.canWrite() -> StorageState.ACCESSIBLE
+            else -> StorageState.PERMISSION_REQUIRED
         }
     }
 
@@ -327,11 +329,9 @@ class StorageManager(private val ctx: Context) {
             return "Not configured"
         }
 
-        autoDetect3dsFolder()?.let { return it.path }
+        selected3dsRootUri()?.let { return describe(it) }
 
-        selected3dsRootUri()?.let {
-            return describe(it)
-        }
+        autoDetect3dsFolder()?.let { return it.path }
 
         return "Not configured"
     }

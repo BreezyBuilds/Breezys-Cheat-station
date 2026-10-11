@@ -10,57 +10,83 @@ import java.text.DateFormat
 import java.util.Date
 
 sealed class CheatResult {
-    /** [fromCache] = true means the data was NOT just downloaded. */
     data class Loaded(val file: CheatFile, val fetchedAt: Long, val fromCache: Boolean, val notice: String?) : CheatResult()
     data class Unavailable(val message: String, val kind: ProviderError? = null) : CheatResult()
 }
 
-/** Combines a [CheatProvider] with the local cache: fresh data when possible, clearly-labelled cached data otherwise. */
-class CheatRepository(private val cache: CacheStore, private val provider: () -> CheatProvider) {
-
+/** Reads every enabled 3DS source, with independent cache/index entries per repository. */
+class CheatRepository(private val cache: CacheStore, private val providers: () -> List<CheatProvider>) {
     fun formatTime(t: Long): String = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(t))
 
-    /** Cache only, never touches the network. */
     fun cached(titleId: String): CheatResult.Loaded? {
-        val src = provider().id
-        val c = cache.loadCheats(src, titleId) ?: return null
-        return CheatResult.Loaded(CheatParser.parse(c.text, titleId), c.fetchedAt, true, null)
-    }
-
-    /** Tries the network; falls back to cached data (flagged as cached) when that fails. */
-    suspend fun load(titleId: String): CheatResult {
-        val p = provider()
-        return try {
-            val r = p.fetch(titleId)
-            cache.saveCheats(p.id, titleId, r.text, r.fetchedAt)
-            val file = CheatParser.parse(r.text, titleId)
-            val notice = if (file.warnings.isNotEmpty()) "${file.warnings.size} line(s) in the source file were skipped because they were malformed." else null
-            CheatResult.Loaded(file, r.fetchedAt, false, notice)
-        } catch (e: ProviderException) {
-            AppLog.w("Repo", "Fetch failed for $titleId: ${e.kind}")
-            val c = cached(titleId)
-            if (c != null && e.kind != ProviderError.CONFIG) {
-                c.copy(notice = "${e.message} Showing saved (cached) cheats from ${formatTime(c.fetchedAt)}; they may be out of date.")
-            } else CheatResult.Unavailable(e.message ?: "Could not load cheats.", e.kind)
-        } catch (e: Exception) {
-            AppLog.e("Repo", "Unexpected error for $titleId", e)
-            cached(titleId)?.copy(notice = "Something went wrong while downloading. Showing saved (cached) cheats.")
-                ?: CheatResult.Unavailable("Something went wrong while downloading cheats.")
+        val found = providers().mapNotNull { provider ->
+            cache.loadCheats(provider.id, titleId)?.let { saved ->
+                val parsed = CheatParser.parse(saved.text, titleId)
+                if (parsed.cheats.isEmpty()) null else Triple(provider.displayName, parsed, saved.fetchedAt)
+            }
         }
+        if (found.isEmpty()) return null
+        return CheatResult.Loaded(MultiSourceCheatMerger.merge(titleId, found.map { it.first to it.second }),
+            found.maxOf { it.third }, true, "Cached cheats from ${found.size} source(s)")
     }
 
-    /** Refreshes the list of Title IDs the source has. Returns null on success, else an error message. */
+    suspend fun load(titleId: String): CheatResult {
+        var lastError: ProviderException? = null
+        val results = mutableListOf<Triple<String, com.breezybuilds.cheatstation.model.CheatFile, Long>>()
+        for (provider in providers()) {
+            try {
+                val fetched = provider.fetch(titleId)
+                val parsed = CheatParser.parse(fetched.text, titleId)
+                if (parsed.cheats.isEmpty()) continue
+                cache.saveCheats(provider.id, titleId, fetched.text, fetched.fetchedAt)
+                results.add(Triple(provider.displayName, parsed, fetched.fetchedAt))
+            } catch (e: ProviderException) {
+                lastError = e
+                AppLog.w("Repo", "${provider.displayName}: ${e.kind}")
+                cache.loadCheats(provider.id, titleId)?.let { saved ->
+                    val parsed = CheatParser.parse(saved.text, titleId)
+                    if (parsed.cheats.isNotEmpty()) results.add(Triple(provider.displayName, parsed, saved.fetchedAt))
+                }
+            } catch (e: Exception) {
+                AppLog.e("Repo", "Unexpected error from ${provider.displayName}", e)
+            }
+        }
+        if (results.isNotEmpty()) {
+            return CheatResult.Loaded(MultiSourceCheatMerger.merge(titleId, results.map { it.first to it.second }),
+                results.maxOf { it.third }, false, "Combined ${results.size} compatible source(s); duplicate codes removed")
+        }
+        return cached(titleId) ?: CheatResult.Unavailable(lastError?.message ?: "No cheats found in the selected repositories.", lastError?.kind)
+    }
+
+    /** Updates indexes independently, retaining successful indexes when another source fails. */
     suspend fun refreshIndex(): String? {
-        val p = provider()
-        return try {
-            val ids = p.listTitleIds() ?: return null
-            cache.saveIndex(p.id, ids, System.currentTimeMillis())
-            null
-        } catch (e: ProviderException) { e.message }
-        catch (e: Exception) { AppLog.e("Repo", "Index refresh failed", e); "Could not refresh the cheat list." }
+        var succeeded = 0
+        var lastError: String? = null
+        for (p in providers()) {
+            try {
+                val ids = p.listTitleIds()
+                if (ids != null) {
+                    cache.saveIndex(p.id, ids, System.currentTimeMillis())
+                    succeeded++
+                }
+            } catch (e: ProviderException) { lastError = e.message }
+            catch (e: Exception) { AppLog.e("Repo", "Index refresh failed: ${p.displayName}", e); lastError = "Could not refresh ${p.displayName}." }
+        }
+        return if (succeeded > 0) null else lastError
     }
 
-    /** true/false when the index is known, null otherwise. */
-    fun sourceHas(titleId: String): Boolean? = cache.loadIndex(provider().id)?.ids?.contains(titleId)
-    fun indexTime(): Long? = cache.loadIndex(provider().id)?.fetchedAt
+    /** False only if ALL enabled sources have a known index and none contain the game. */
+    fun sourceHas(titleId: String): Boolean? {
+        val all = providers()
+        if (all.isEmpty()) return null
+        var unknown = false
+        for (p in all) {
+            val index = cache.loadIndex(p.id)
+            if (index == null) unknown = true
+            else if (titleId in index.ids) return true
+        }
+        return if (unknown) null else false
+    }
+
+    fun indexTime(): Long? = providers().mapNotNull { cache.loadIndex(it.id)?.fetchedAt }.maxOrNull()
 }

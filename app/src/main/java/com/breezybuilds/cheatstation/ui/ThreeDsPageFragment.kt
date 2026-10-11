@@ -29,7 +29,7 @@ class ThreeDsPageFragment : Fragment() {
     private lateinit var banner: TextView
     private lateinit var progress: LinearProgressIndicator
     private var searchQuery = ""
-    private lateinit var empty: TextView
+    private lateinit var empty: LibraryEmptyState
     private lateinit var adapter: GameAdapter
 
     private var scanned: List<Game> = emptyList()
@@ -78,24 +78,12 @@ class ThreeDsPageFragment : Fragment() {
             setPadding(0, Ui.dp(ctx, 4), 0, Ui.dp(ctx, 16))
         }
 
-        empty = Ui.tv(ctx, "", 15f, secondary = true).apply {
-            setPadding(
-                Ui.dp(ctx, 16),
-                Ui.dp(ctx, 24),
-                Ui.dp(ctx, 16),
-                0
-            )
-        }
+        empty = LibraryEmptyState(ctx)
 
-        content.addView(empty, Ui.lp())
-        content.addView(
-            list,
-            Ui.lp(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                0,
-                1f
-            )
-        )
+        val libraryArea = android.widget.FrameLayout(ctx)
+        libraryArea.addView(list, android.widget.FrameLayout.LayoutParams(-1, -1))
+        libraryArea.addView(empty, android.widget.FrameLayout.LayoutParams(-1, -2, android.view.Gravity.CENTER))
+        content.addView(libraryArea, Ui.lp(-1, 0, 1f))
 
         return content
     }
@@ -163,29 +151,25 @@ class ThreeDsPageFragment : Fragment() {
         }
 
         busy = true
-        progress.visibility = View.VISIBLE
+        rebuild()
+        progress.visibility = View.GONE
 
-        Ui.show(
-            banner,
-            Ui.Kind.INFO,
-            "Scanning for games…"
-        )
+        banner.visibility = View.GONE
 
         viewLifecycleOwner.lifecycleScope.launch {
             val res = withContext(Dispatchers.IO) {
                 app.scanner.scan { msg ->
                     requireActivity().runOnUiThread {
-                        Ui.show(
-                            banner,
-                            Ui.Kind.INFO,
-                            msg
-                        )
+                        if (::empty.isInitialized && scanned.isEmpty()) {
+                            empty.showProgress("Discovering 3DS games", msg)
+                        }
                     }
                 }
             }
 
             busy = false
             progress.visibility = View.GONE
+            rebuild()
 
             if (res.error != null) {
                 Ui.show(
@@ -242,8 +226,10 @@ class ThreeDsPageFragment : Fragment() {
 
         if (all.isEmpty()) {
             empty.text =
-                if (app.storage.has3dsStorage()) {
-                    "No games found yet. Use ⋮ > Rescan games, or add a game by Title ID."
+                if (busy) {
+                    "Scanning 3DS games… Your library is being checked."
+                } else if (app.storage.has3dsStorage()) {
+                    "No saved games yet. Use ⋮ > Rescan games to check your library."
                 } else {
                     "No games yet — configure the 3DS folders in Settings."
                 }
@@ -272,8 +258,10 @@ class ThreeDsPageFragment : Fragment() {
 
         if (filtered.isEmpty()) {
             empty.text =
-                if (all.isEmpty()) {
-                    "No games found yet. Use ⋮ > Rescan games, or add a game by Title ID."
+                if (all.isEmpty() && busy) {
+                    "Scanning 3DS games… Your library is being checked."
+                } else if (all.isEmpty()) {
+                    "No saved games yet. Use ⋮ > Rescan games to check your library."
                 } else {
                     "No games match your search."
                 }
@@ -316,6 +304,8 @@ class ThreeDsPageFragment : Fragment() {
 
             availableCounts.clear()
             availableCounts.putAll(avail)
+            avail.forEach { (id, count) -> GameCheatStatus.put(requireContext(), "3ds", id, count) }
+            avail.forEach { (id, count) -> GameCheatStatus.put(requireContext(), "3ds", id, count) }
 
             adapter.notifyDataSetChanged()
         }
@@ -328,8 +318,8 @@ class ThreeDsPageFragment : Fragment() {
         }
 
         val avail =
-            availableCounts[g.titleId]?.let {
-                "$it cheat(s) available"
+            (availableCounts[g.titleId] ?: GameCheatStatus.get(requireContext(), "3ds", g.titleId))?.let {
+                "$it cheats available"
             }
                 ?: if (app.repository.sourceHas(g.titleId) == false) {
                     "No cheats found in the current source"
@@ -357,7 +347,7 @@ class ThreeDsPageFragment : Fragment() {
 
         if (!showTechnicalDetails) {
             val conciseStatus = when {
-                avail.contains("No cheats") -> "No cheats listed"
+                avail.contains("No cheats") -> "No cheats found"
                 avail.contains("available") -> avail
                 else -> "Tap to check cheats"
             }
@@ -499,7 +489,8 @@ class ThreeDsPageFragment : Fragment() {
         }
 
         busy = true
-        progress.visibility = View.VISIBLE
+        rebuild()
+        progress.visibility = View.GONE
 
         viewLifecycleOwner.lifecycleScope.launch {
             val s = DatabaseUpdater.updateAll(
@@ -517,6 +508,7 @@ class ThreeDsPageFragment : Fragment() {
 
             busy = false
             progress.visibility = View.GONE
+            rebuild()
 
             Ui.show(
                 banner,

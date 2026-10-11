@@ -75,7 +75,7 @@ class App : Application() {
         cache = CacheStore(File(filesDir, "cache"))
 
         repository = CheatRepository(cache) {
-            GitHubCheatProvider(settings.source())
+            settings.sources().map { GitHubCheatProvider(it) }
         }
 
         scanner = GameScanner(
@@ -112,13 +112,7 @@ class App : Application() {
         )
 
         ps2Repository = Ps2CheatRepository(cache) {
-            val selected = ps2Settings.source()
-
-            listOf(
-                Ps2CheatProvider(selected)
-            ) + Ps2CheatSources.all
-                .filter { it.id != selected.id }
-                .map { Ps2CheatProvider(it) }
+            ps2Settings.sources().map { Ps2CheatProvider(it) }
         }
 
         AppLog.verbose = settings.debugLog

@@ -14,6 +14,12 @@ class WelcomeActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val setupPrefs = getSharedPreferences(RetroSetupActivity.PREFS, MODE_PRIVATE)
+        if (!intent.getBooleanExtra("skip_retro_setup", false) && !setupPrefs.getBoolean(RetroSetupActivity.FINISHED, false)) {
+            startActivity(Intent(this, RetroSetupActivity::class.java))
+            finish()
+            return
+        }
 
         val scroll = androidx.core.widget.NestedScrollView(this).apply {
             isFillViewport = true
@@ -23,7 +29,7 @@ class WelcomeActivity : AppCompatActivity() {
 
         Ui.edgeToEdge(scroll)
 
-        val title = Ui.tv(this, "Breezy's Cheat Station", 28f, bold = true)
+        val title = Ui.tv(this, "Breezy's Retro Loader", 28f, bold = true)
         root.addView(title, Ui.lp())
 
         val subtitle = Ui.tv(

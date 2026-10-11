@@ -11,8 +11,8 @@ android {
         applicationId = "com.breezybuilds.cheatstation"
         minSdk = 29
         targetSdk = 35
-        versionCode = 5
-        versionName = "1.3.0"
+        versionCode = 6
+        versionName = "3.0.0-dev"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // ARM64 is the primary target; the app is pure Kotlin so it runs on any ABI.
     }

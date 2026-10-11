@@ -42,6 +42,10 @@ class GameScanner(private val ctx: Context, private val storage: StorageManager,
             DocumentFile.fromTreeUri(ctx, u)?.let { try { collectFiles(it, 3, hits) } catch (e: Exception) { warnings += "Could not read the games folder." } }
         }
 
+        com.breezybuilds.cheatstation.emulator.UniversalRoms.systemFolder(ctx, "3DS")?.let {
+            try { collectFiles(it, 3, hits) } catch (_: Exception) { warnings += "Could not read universal 3DS games folder." }
+        }
+
         val games = LinkedHashMap<String, Game>()
         for ((tid, inst) in installed) {
             val m = inst.meta

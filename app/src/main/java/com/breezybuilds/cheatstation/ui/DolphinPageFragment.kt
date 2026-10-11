@@ -12,6 +12,8 @@ import androidx.recyclerview.widget.RecyclerView
 import com.breezybuilds.cheatstation.App
 import com.breezybuilds.cheatstation.R
 import com.breezybuilds.cheatstation.model.Game
+import com.breezybuilds.cheatstation.emulator.LibraryRefresh
+import com.breezybuilds.cheatstation.emulator.UniversalRoms
 import com.breezybuilds.cheatstation.scan.DolphinPlatform
 import com.breezybuilds.cheatstation.provider.DolphinCheatProvider
 import com.breezybuilds.cheatstation.provider.ProviderException
@@ -25,6 +27,8 @@ class DolphinPageFragment(
 ) : Fragment(R.layout.fragment_dolphin_page) {
 
     private lateinit var status: TextView
+    private lateinit var emptyState: LibraryEmptyState
+    private var scanning = false
     private lateinit var recycler: RecyclerView
     private lateinit var adapter: DolphinGameAdapter
     private val cheatCounts = mutableMapOf<String, Int>()
@@ -34,6 +38,10 @@ class DolphinPageFragment(
 
         status = view.findViewById(R.id.dolphin_status)
         recycler = view.findViewById(R.id.dolphin_games)
+        val parent = recycler.parent as android.widget.FrameLayout
+        emptyState = LibraryEmptyState(requireContext())
+        parent.addView(emptyState, android.widget.FrameLayout.LayoutParams(-1, -2, android.view.Gravity.CENTER))
+        status.visibility = View.GONE
 
 
         adapter = DolphinGameAdapter(
@@ -44,7 +52,34 @@ class DolphinPageFragment(
         recycler.layoutManager = LinearLayoutManager(requireContext())
         recycler.adapter = adapter
 
-        scan()
+        val application = requireActivity().application as App
+        val key = cacheKey()
+        val cached = application.cache.loadSystemGames(key)
+        adapter.submitList(cached)
+        updateEmptyState(cached.size)
+        status.text = if (cached.isEmpty()) "Checking saved ${cacheKey()} games…" else "${cached.size} saved game(s)"
+        if (LibraryRefresh.needsScan(requireContext(), key, gamesSignature(), application.cache.hasSystemGames(key))) {
+            scan()
+        } else if (cached.isNotEmpty()) {
+            updateCheatCounts(cached)
+        } else {
+            status.text = "No saved games yet. Use Rescan games to check your library."
+        }
+    }
+
+    private fun updateEmptyState(count: Int) {
+        if (!::emptyState.isInitialized) return
+        emptyState.visibility = if (count == 0) View.VISIBLE else View.GONE
+        emptyState.text = if (scanning) "Scanning games…" else "No games found in this library."
+    }
+
+    private fun cacheKey() = if (platform == DolphinPlatform.WII) "Wii" else "GameCube"
+    private fun gamesSignature(): String {
+        val storage = (requireActivity().application as App).dolphinStorage
+        val folder = if (platform == DolphinPlatform.WII) storage.wiiGamesUri else storage.gameCubeGamesUri
+        return listOf(folder?.toString().orEmpty(),
+            UniversalRoms.uri(requireContext())?.toString().orEmpty(),
+            UniversalRoms.scanMode(requireContext()).name).joinToString("|")
     }
 
     override fun onResume() {
@@ -76,6 +111,7 @@ class DolphinPageFragment(
     fun filterGames(query: String) {
         adapter.filter(query)
 
+        updateEmptyState(adapter.itemCount)
         status.text = if (query.isBlank()) {
             "${adapter.itemCount} game(s) found"
         } else {
@@ -113,21 +149,36 @@ class DolphinPageFragment(
     }
 
     private fun scan() {
+        scanning = true
+        updateEmptyState(adapter.itemCount)
         status.text = when (platform) {
-            DolphinPlatform.WII -> "Scanning Wii games…"
-            DolphinPlatform.GAMECUBE -> "Scanning GameCube games…"
+            DolphinPlatform.WII -> "Scanning Wii games… Your saved games remain available."
+            DolphinPlatform.GAMECUBE -> "Scanning GameCube games… Your saved games remain available."
         }
 
         viewLifecycleOwner.lifecycleScope.launch {
             val result = withContext(Dispatchers.IO) {
                 (requireActivity().application as App)
                     .dolphinScanner
-                    .scan(platform)
+                    .scan(platform) { message ->
+                        activity?.runOnUiThread {
+                            if (::emptyState.isInitialized && adapter.itemCount == 0 && scanning) {
+                                emptyState.showProgress("Discovering ${cacheKey()} games", message)
+                            }
+                        }
+                    }
             }
 
-            adapter.submitList(result.games)
-            updateCheatCounts(result.games)
+            if (result.error == null) {
+                val application = requireActivity().application as App
+                application.cache.saveSystemGames(cacheKey(), result.games)
+                LibraryRefresh.scanned(requireContext(), cacheKey(), gamesSignature())
+                adapter.submitList(result.games)
+                updateCheatCounts(result.games)
+            }
 
+            scanning = false
+            updateEmptyState(adapter.itemCount)
             status.text = when {
                 result.error != null -> result.error
 

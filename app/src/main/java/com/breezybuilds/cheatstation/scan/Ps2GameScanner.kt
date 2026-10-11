@@ -23,7 +23,7 @@ class Ps2GameScanner(
 
     fun scan(progress: (String) -> Unit = {}): ScanResult {
 
-        val root = storage.gamesDoc()
+        val root = storage.gamesDoc() ?: com.breezybuilds.cheatstation.emulator.UniversalRoms.systemFolder(ctx, "PS2")
             ?: return ScanResult(
                 emptyList(),
                 emptyList(),
@@ -170,7 +170,7 @@ class Ps2GameScanner(
             depth: Int
         ) {
 
-            for (file in directory.listFiles()) {
+            for (file in if (directory.isFile) arrayOf(directory) else directory.listFiles()) {
 
                 if (file.isDirectory) {
 
@@ -212,7 +212,17 @@ class Ps2GameScanner(
             }
         }
 
-        walk(root, 5)
+        val discovered = if (storage.gamesUri == null)
+            com.breezybuilds.cheatstation.emulator.UniversalRoms.loadDiscovered(ctx, "PS2")
+        else emptyList()
+        if (discovered.isNotEmpty()) {
+            progress("Identifying ${discovered.size} discovered PS2 files…")
+            discovered.forEachIndexed { index, entry ->
+                val file = DocumentFile.fromSingleUri(ctx, android.net.Uri.parse(entry.uri))
+                if (file != null) walk(file, 0)
+                if ((index + 1) % 5 == 0) progress("Identifying ${index + 1} of ${discovered.size} PS2 files…")
+            }
+        } else walk(root, 5)
 
         return ScanResult(
             out.values.sortedBy {

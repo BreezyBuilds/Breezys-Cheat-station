@@ -16,71 +16,42 @@ class Ps2CheatRepository(
         DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(t))
 
     fun cached(key: String): CheatResult.Loaded? {
-        for (provider in providers()) {
-            val c = cache.loadCheats(provider.id, key) ?: continue
-            val f = PnachParser.parse(c.text, key)
-            if (f.cheats.isNotEmpty()) {
-                return CheatResult.Loaded(f, c.fetchedAt, true, null)
+        val found = providers().mapNotNull { provider ->
+            cache.loadCheats(provider.id, key)?.let { saved ->
+                val parsed = PnachParser.parse(saved.text, key)
+                if (parsed.cheats.isEmpty()) null else Triple(provider.displayName, parsed, saved.fetchedAt)
             }
         }
-        return null
+        if (found.isEmpty()) return null
+        return CheatResult.Loaded(MultiSourceCheatMerger.merge(key, found.map { it.first to it.second }),
+            found.maxOf { it.third }, true, "Cached cheats from ${found.size} source(s)")
     }
 
     suspend fun load(key: String): CheatResult {
         var lastError: ProviderException? = null
-
+        val found = mutableListOf<Triple<String, com.breezybuilds.cheatstation.model.CheatFile, Long>>()
         for (provider in providers()) {
             try {
-                val r = provider.fetch(key)
-                val f = PnachParser.parse(r.text, key)
-
-                if (f.cheats.isEmpty()) {
-                    lastError = ProviderException(
-                        ProviderError.INVALID,
-                        "No usable PS2 cheats were found in ${provider.displayName}."
-                    )
-                    continue
-                }
-
-                cache.saveCheats(provider.id, key, r.text, r.fetchedAt)
-
-                val notice = if (f.warnings.isNotEmpty()) {
-                    "${f.warnings.size} line(s) skipped while parsing the PNACH file. Source: ${provider.displayName}."
-                } else {
-                    "Source: ${provider.displayName}"
-                }
-
-                return CheatResult.Loaded(
-                    f,
-                    r.fetchedAt,
-                    false,
-                    notice
-                )
+                val fetched = provider.fetch(key)
+                val parsed = PnachParser.parse(fetched.text, key)
+                if (parsed.cheats.isEmpty()) continue
+                cache.saveCheats(provider.id, key, fetched.text, fetched.fetchedAt)
+                found.add(Triple(provider.displayName, parsed, fetched.fetchedAt))
             } catch (e: ProviderException) {
                 lastError = e
-
-                val cached = cache.loadCheats(provider.id, key)
-                if (cached != null && e.kind != ProviderError.CONFIG) {
-                    val f = PnachParser.parse(cached.text, key)
-                    if (f.cheats.isNotEmpty()) {
-                        return CheatResult.Loaded(
-                            f,
-                            cached.fetchedAt,
-                            true,
-                            "${e.message} Showing cached PS2 cheats from ${formatTime(cached.fetchedAt)}."
-                        )
-                    }
+                cache.loadCheats(provider.id, key)?.let { saved ->
+                    val parsed = PnachParser.parse(saved.text, key)
+                    if (parsed.cheats.isNotEmpty()) found.add(Triple(provider.displayName, parsed, saved.fetchedAt))
                 }
-
-                if (e.kind == ProviderError.CONFIG) break
             } catch (e: Exception) {
                 AppLog.e("PS2Repo", "Unexpected error from ${provider.displayName}", e)
             }
         }
-
-        return CheatResult.Unavailable(
-            lastError?.message ?: "No PS2 cheats were found in the configured sources.",
-            lastError?.kind
-        )
+        if (found.isNotEmpty()) return CheatResult.Loaded(
+            MultiSourceCheatMerger.merge(key, found.map { it.first to it.second }),
+            found.maxOf { it.third }, false,
+            "Combined ${found.size} compatible source(s); duplicate codes removed")
+        return cached(key) ?: CheatResult.Unavailable(
+            lastError?.message ?: "No PS2 cheats were found in the configured sources.", lastError?.kind)
     }
 }

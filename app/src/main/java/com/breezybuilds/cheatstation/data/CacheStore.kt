@@ -40,6 +40,10 @@ class CacheStore(private val dir: File) {
 
     fun saveGames(g: List<Game>) = saveList("games.json", g)
     fun loadGames(): List<Game> = loadList("games.json")
+    // Separate per-system caches; an empty successful scan is still a valid cache.
+    fun hasSystemGames(system: String): Boolean = File(dir, "system_${system}.json").exists()
+    fun loadSystemGames(system: String): List<Game> = loadList("system_${system}.json")
+    fun saveSystemGames(system: String, games: List<Game>) = saveList("system_${system}.json", games)
     fun saveManual(g: List<Game>) = saveList("manual_games.json", g)
     fun loadManual(): List<Game> = loadList("manual_games.json")
 

@@ -1,6 +1,7 @@
 package com.breezybuilds.cheatstation.provider
 
 import com.breezybuilds.cheatstation.cheats.dolphin.DolphinCheatParser
+import com.breezybuilds.cheatstation.data.MultiSourceCheatMerger
 import com.breezybuilds.cheatstation.model.CheatFile
 import com.breezybuilds.cheatstation.util.AppLog
 import org.json.JSONObject
@@ -21,28 +22,24 @@ class DolphinCheatProvider(
         }
 
         var lastError: ProviderException? = null
+        val results = mutableListOf<Pair<String, CheatFile>>()
 
-        for (source in sources()) {
+        for (source in sources().distinctBy { it.id }) {
             try {
                 val result = fetchFromSource(source, id)
-
                 if (result != null && result.cheats.isNotEmpty()) {
-                    AppLog.i(
-                        "DolphinCheats",
-                        "Found $id in ${source.name}"
-                    )
-                    return result
+                    AppLog.i("DolphinCheats", "Found $id in ${source.name}")
+                    results.add(source.name to result)
                 }
             } catch (e: ProviderException) {
                 lastError = e
+                AppLog.e("DolphinCheats", "Source ${source.name} failed", e)
             } catch (e: Exception) {
-                AppLog.e(
-                    "DolphinCheats",
-                    "Source ${source.name} failed",
-                    e
-                )
+                AppLog.e("DolphinCheats", "Source ${source.name} failed", e)
             }
         }
+
+        if (results.isNotEmpty()) return MultiSourceCheatMerger.merge(id, results)
 
         throw lastError ?: ProviderException(
             ProviderError.NOT_FOUND,
@@ -159,7 +156,7 @@ class DolphinCheatProvider(
                 (basePath.isEmpty() ||
                     path.startsWith("$basePath/", ignoreCase = true))
             ) {
-                return filename
+                return path
             }
         }
 

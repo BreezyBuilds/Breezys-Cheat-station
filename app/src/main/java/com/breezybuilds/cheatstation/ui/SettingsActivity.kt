@@ -23,6 +23,9 @@ import com.breezybuilds.cheatstation.app
 import com.breezybuilds.cheatstation.cheats.BackupManager
 import com.breezybuilds.cheatstation.data.DatabaseUpdater
 import com.breezybuilds.cheatstation.provider.CheatSourceConfig
+import com.breezybuilds.cheatstation.provider.Ps2CheatSources
+import com.breezybuilds.cheatstation.provider.Ps2Settings
+import com.breezybuilds.cheatstation.emulator.UniversalRoms
 import com.breezybuilds.cheatstation.provider.RecommendedCheatSources
 import com.breezybuilds.cheatstation.storage.StorageManager
 import com.breezybuilds.cheatstation.storage.toStatus
@@ -38,10 +41,20 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var toolbar: MaterialToolbar
 
     private enum class Page {
-        HOME, SYSTEMS, THREE_DS, PS2, WII, GAMECUBE, CHEATS, BACKUPS, ADVANCED, ABOUT
+        HOME, SYSTEMS, THREE_DS, PS2, WII, GAMECUBE, CHEATS, CHEAT_SYSTEM, BACKUPS, ADVANCED, ABOUT
     }
 
     private var page = Page.HOME
+    private var cheatSystem = "3DS"
+
+    /** Identical identity labels across the four system-specific source pages. */
+    private fun cheatSystemLabel(id: String): String = when (id) {
+        "3DS" -> "▣  Nintendo 3DS"
+        "PS2" -> "◈  PlayStation 2"
+        "Wii" -> "◉  Nintendo Wii"
+        else -> "◆  Nintendo GameCube"
+    }
+
 
     private val pickRoot = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { u -> if (u != null) accept(StorageManager.Slot.ROOT, u) }
     private val pickCheats = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { u -> if (u != null) accept(StorageManager.Slot.CHEATS, u) }
@@ -113,6 +126,7 @@ class SettingsActivity : AppCompatActivity() {
             Page.HOME -> { finish(); return }
             Page.SYSTEMS, Page.CHEATS, Page.BACKUPS, Page.ADVANCED, Page.ABOUT -> Page.HOME
             Page.THREE_DS, Page.PS2, Page.WII, Page.GAMECUBE -> Page.SYSTEMS
+            Page.CHEAT_SYSTEM -> Page.CHEATS
         }
         render()
     }
@@ -125,6 +139,7 @@ class SettingsActivity : AppCompatActivity() {
         Page.WII -> "Wii"
         Page.GAMECUBE -> "GameCube"
         Page.CHEATS -> "Cheats & Sources"
+        Page.CHEAT_SYSTEM -> "$cheatSystem cheat sources"
         Page.BACKUPS -> "Backups"
         Page.ADVANCED -> "Advanced"
         Page.ABOUT -> "About"
@@ -160,9 +175,12 @@ class SettingsActivity : AppCompatActivity() {
             .setMultiChoiceItems(labels, sources.map { it.id in selected }.toBooleanArray()) { _, which, checked ->
                 if (checked) selected += sources[which].id else selected -= sources[which].id
             }
-            .setPositiveButton("Save") { _, _ ->
-                settings.saveSources(sources.filter { it.id in selected })
-                render()
+            .setNeutralButton("Use all") { _, _ ->
+                if (sources.isNotEmpty()) { settings.saveSources(sources); render() }
+            }
+            .setPositiveButton("Save selected") { _, _ ->
+                if (selected.isEmpty()) note(Ui.Kind.ERROR, "Select at least one repository.")
+                else { settings.saveSources(sources.filter { it.id in selected }); render() }
             }
             .setNegativeButton("Cancel", null)
             .show()
@@ -307,12 +325,17 @@ class SettingsActivity : AppCompatActivity() {
         // Try direct filesystem discovery for this selected emulator.
         val detectedFolder = st.autoDetect3dsFolder()
         if (detectedFolder != null) {
-            Ui.show(
-                banner,
-                Ui.Kind.OK,
-                "✓ ${detected.name} detected: ${detectedFolder.path}"
-            )
             render()
+            if (st.threeDsStorageState() == com.breezybuilds.cheatstation.storage.StorageState.ACCESSIBLE) {
+                Ui.show(banner, Ui.Kind.OK, "${detected.name} data folder is accessible.")
+            } else {
+                MaterialAlertDialogBuilder(this)
+                    .setTitle("Grant ${detected.name} folder access")
+                    .setMessage("Retro Loader found ${detectedFolder.path}, but has not verified write access. Select this folder in Android's picker to enable cheat installation.")
+                    .setPositiveButton("Grant access") { _, _ -> pickRoot.launch(st.pickerHint()) }
+                    .setNegativeButton("Later", null)
+                    .show()
+            }
             return
         }
 
@@ -360,6 +383,7 @@ class SettingsActivity : AppCompatActivity() {
             Page.WII -> renderDolphinSystemSettings(DolphinSystem.WII)
             Page.GAMECUBE -> renderDolphinSystemSettings(DolphinSystem.GAMECUBE)
             Page.CHEATS -> renderCheatSettings()
+            Page.CHEAT_SYSTEM -> renderSystemCheatSettings()
             Page.BACKUPS -> renderBackupSettings()
             Page.ADVANCED -> renderAdvancedSettings()
             Page.ABOUT -> renderAbout()
@@ -368,11 +392,15 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun renderHome() {
         content.addView(Ui.tv(this, "Emulators, cheats and app preferences", 13f, secondary = true), Ui.lp())
+        subsection("RETRO LOADER")
+        card("Compatible Emulators", "Choose systems, detect installed emulators and open trusted download sources") {
+            startActivity(android.content.Intent(this, RetroSetupActivity::class.java).putExtra("from_settings", true))
+        }
         subsection("SYSTEMS")
         card("Systems", "Emulators, game folders and system-specific storage") { navigate(Page.SYSTEMS) }
 
         subsection("APP")
-        card("Cheats & Sources", "Cheat source, database and Dolphin repositories") { navigate(Page.CHEATS) }
+        card("Cheats & Sources", "Repositories and cheat databases by system") { navigate(Page.CHEATS) }
         card("Backups", "Manage automatic cheat backups") { navigate(Page.BACKUPS) }
         card("Advanced", "Updates, debugging and diagnostics") { navigate(Page.ADVANCED) }
         card("About", "Version and application information") { navigate(Page.ABOUT) }
@@ -425,104 +453,24 @@ class SettingsActivity : AppCompatActivity() {
             }
         )
 
-        // Dolphin station bays
-        val dolphin = app.dolphinStorage.detectDolphin()
-
-        val wiiState = when {
-            dolphin == null ->
-                com.breezybuilds.cheatstation.storage.StorageState.NOT_CONFIGURED
-
-            app.dolphinStorage.wiiGamesUri != null ->
+        // Use exactly the same Dolphin readiness criteria as the individual system pages.
+        val dolphinStorage = app.dolphinStorage
+        val dolphin = dolphinStorage.detectDolphin()
+        val dolphinState = when {
+            dolphinStorage.directGameSettingsStore() != null || dolphinStorage.dolphinUserDoc() != null ->
                 com.breezybuilds.cheatstation.storage.StorageState.ACCESSIBLE
-
-            else ->
-                com.breezybuilds.cheatstation.storage.StorageState.DETECTED
+            dolphin != null -> com.breezybuilds.cheatstation.storage.StorageState.PERMISSION_REQUIRED
+            else -> com.breezybuilds.cheatstation.storage.StorageState.NOT_CONFIGURED
         }
-
-        val wiiStatus = com.breezybuilds.cheatstation.storage.StorageStatus(
-            state = wiiState,
-            title = when (wiiState) {
-                com.breezybuilds.cheatstation.storage.StorageState.ACCESSIBLE -> "READY"
-                com.breezybuilds.cheatstation.storage.StorageState.DETECTED -> "SETUP NEEDED"
-                else -> "NOT DETECTED"
-            },
-            detail = when (wiiState) {
-                com.breezybuilds.cheatstation.storage.StorageState.ACCESSIBLE ->
-                    "Dolphin detected and Wii games folder is connected."
-
-                com.breezybuilds.cheatstation.storage.StorageState.DETECTED ->
-                    "Dolphin detected; connect a Wii games folder."
-
-                else ->
-                    "Dolphin emulator was not detected."
+        listOf("Wii" to Page.WII, "GameCube" to Page.GAMECUBE).forEach { (name, destination) ->
+            val card = Ui.statusPanel(this, name, dolphinState.toStatus(), dolphin?.name)
+            card.setOnClickListener { navigate(destination) }
+            content.addView(card, Ui.lp().apply { topMargin = Ui.dp(this@SettingsActivity, 6) })
+            if (dolphinState == com.breezybuilds.cheatstation.storage.StorageState.ACCESSIBLE &&
+                UniversalRoms.uri(this) != null) {
+                line("$name library · Games can be scanned from your universal ROM folder", true)
             }
-        )
-
-        val wiiCard = Ui.statusPanel(
-            this,
-            "WII",
-            wiiStatus,
-            dolphin?.name
-        )
-
-        wiiCard.setOnClickListener {
-            navigate(Page.WII)
         }
-
-        content.addView(
-            wiiCard,
-            Ui.lp().apply {
-                topMargin = Ui.dp(this@SettingsActivity, 6)
-            }
-        )
-
-        val gameCubeState = when {
-            dolphin == null ->
-                com.breezybuilds.cheatstation.storage.StorageState.NOT_CONFIGURED
-
-            app.dolphinStorage.gameCubeGamesUri != null ->
-                com.breezybuilds.cheatstation.storage.StorageState.ACCESSIBLE
-
-            else ->
-                com.breezybuilds.cheatstation.storage.StorageState.DETECTED
-        }
-
-        val gameCubeStatus = com.breezybuilds.cheatstation.storage.StorageStatus(
-            state = gameCubeState,
-            title = when (gameCubeState) {
-                com.breezybuilds.cheatstation.storage.StorageState.ACCESSIBLE -> "READY"
-                com.breezybuilds.cheatstation.storage.StorageState.DETECTED -> "SETUP NEEDED"
-                else -> "NOT DETECTED"
-            },
-            detail = when (gameCubeState) {
-                com.breezybuilds.cheatstation.storage.StorageState.ACCESSIBLE ->
-                    "Dolphin detected and GameCube games folder is connected."
-
-                com.breezybuilds.cheatstation.storage.StorageState.DETECTED ->
-                    "Dolphin detected; connect a GameCube games folder."
-
-                else ->
-                    "Dolphin emulator was not detected."
-            }
-        )
-
-        val gameCubeCard = Ui.statusPanel(
-            this,
-            "GAMECUBE",
-            gameCubeStatus,
-            dolphin?.name
-        )
-
-        gameCubeCard.setOnClickListener {
-            navigate(Page.GAMECUBE)
-        }
-
-        content.addView(
-            gameCubeCard,
-            Ui.lp().apply {
-                topMargin = Ui.dp(this@SettingsActivity, 6)
-            }
-        )
     }
 
     /** Shared navigation and management rows across every supported platform. */
@@ -575,7 +523,7 @@ class SettingsActivity : AppCompatActivity() {
             }
             manage("Emulator data folder", *actions.toTypedArray())
         }
-        settingRow("Games folder", st.describe(st.gamesUri)) {
+        settingRow("Games folder", if (st.gamesUri != null) st.describe(st.gamesUri) else com.breezybuilds.cheatstation.emulator.UniversalRoms.gamesFolderLabel(this, "3DS")) {
             val actions = mutableListOf<Pair<String, () -> Unit>>(
                 "Select games folder" to { pickGames.launch(null) }
             )
@@ -619,7 +567,7 @@ class SettingsActivity : AppCompatActivity() {
                 "Select emulator data folder" to { pickPs2Root.launch(null) },
                 "Set emulator path manually" to { ps2ManualPathDialog() })
         }
-        settingRow("Games folder", ps2.gamesUri?.let { ps2.describe(it) } ?: "Not configured") {
+        settingRow("Games folder", ps2.gamesUri?.let { ps2.describe(it) } ?: com.breezybuilds.cheatstation.emulator.UniversalRoms.gamesFolderLabel(this, "PS2")) {
             pickPs2Games.launch(null)
         }
         settingRow("Transfer folder", ps2.transferUri?.let { ps2.describe(it) } ?: "Not configured") {
@@ -657,7 +605,7 @@ class SettingsActivity : AppCompatActivity() {
             manage("Dolphin emulator", "Configure cheat storage" to { pickDolphinUser.launch(dolphin.dolphinUserUri) })
         }
         subsection("STORAGE")
-        settingRow("Games folder", dolphin.describe(gamesUri)) {
+        settingRow("Games folder", if (gamesUri != null) dolphin.describe(gamesUri) else com.breezybuilds.cheatstation.emulator.UniversalRoms.gamesFolderLabel(this, name)) {
             val choose: () -> Unit = {
                 if (system == DolphinSystem.WII) pickWiiGames.launch(gamesUri)
                 else pickGameCubeGames.launch(gamesUri)
@@ -692,27 +640,283 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun renderCheatSettings() {
-        val src = app.settings.source()
-        subsection("3DS / GENERAL CHEAT SOURCE")
-        card("Current source", src.displayName, ::chooseRecommendedSource)
-        line("${src.branch} • ${src.basePath} • ${src.fileNamePattern}", true)
-        btn("Browse recommended sources", true) { chooseRecommendedSource() }
-        btn("Edit custom GitHub source") { editSource() }
-        btn("Use default Sharkive source") { app.settings.resetSource(); render(); note(Ui.Kind.OK, "Sharkive is now the active cheat source.") }
-
-        subsection("CHEAT DATABASE")
+        line("Choose a system to manage its cheat repositories. Individual game cheats stay in the game library.", true)
+        listOf("3DS" to "Nintendo 3DS", "PS2" to "PlayStation 2",
+            "Wii" to "Wii", "GameCube" to "GameCube").forEach { (id, label) ->
+            val summary = when (id) {
+                "3DS" -> "${app.settings.sources().size} repositories enabled"
+                "PS2" -> "${Ps2Settings(this).sources().size} repositories enabled"
+                else -> "${app.dolphinSettings.sources().size} Dolphin repositories enabled · Shared settings"
+            }
+            card(cheatSystemLabel(id), summary) { cheatSystem = id; navigate(Page.CHEAT_SYSTEM) }
+        }
+        subsection("DATABASE & UPDATES")
         line("Cached cheat data: ${app.cache.cheatDataSize() / 1024} KB", true)
-        btn("Refresh cheat database now", true) { refreshNow() }
+        btn("Refresh 3DS cheat database") { refreshNow() }
         btn("Clear cached cheat data") {
             MaterialAlertDialogBuilder(this).setTitle("Clear cached cheat data?")
-                .setMessage("Downloaded cheat lists are removed from this app. Cheats already installed in the emulator are not touched.")
-                .setPositiveButton("Clear") { _, _ -> val n = app.cache.clearCheatData(); render(); note(Ui.Kind.OK, "Cleared ${n / 1024} KB of cached data.") }
-                .setNegativeButton("Cancel", null).show()
+                .setMessage("Downloaded cheat lists are removed from this app. Installed cheats are not touched.")
+                .setPositiveButton("Clear") { _, _ ->
+                    val n = app.cache.clearCheatData()
+                    render()
+                    note(Ui.Kind.OK, "Cleared ${n / 1024} KB of cached data.")
+                }.setNegativeButton("Cancel", null).show()
         }
-        subsection("DOLPHIN CHEAT REPOSITORIES")
-        line("Enabled repositories: ${app.dolphinSettings.sources().size}", true)
-        btn("Choose cheat repositories", true) { chooseDolphinRepositories() }
-        btn("Add GitHub repository") { addDolphinRepository() }
+    }
+
+    /** One consistent set of actions for every console. Source formats stay system-specific. */
+    private fun renderSystemCheatSettings() {
+        val shared = cheatSystem == "Wii" || cheatSystem == "GameCube"
+        val name = when (cheatSystem) {
+            "3DS" -> "Nintendo 3DS"
+            "PS2" -> "PlayStation 2"
+            "Wii" -> "Nintendo Wii"
+            else -> "Nintendo GameCube"
+        }
+        line("${cheatSystemLabel(cheatSystem)} · Cheat sources", true)
+        line("Choose how compatible repositories are searched. Game-specific cheats stay in your game library.", true)
+        subsection("REPOSITORIES")
+        val count = when (cheatSystem) {
+            "3DS" -> app.settings.sources().size
+            "PS2" -> Ps2Settings(this).sources().size
+            else -> app.dolphinSettings.sources().size
+        }
+        val total = when (cheatSystem) {
+            "3DS" -> RecommendedCheatSources.all.size
+            "PS2" -> Ps2CheatSources.all.size
+            else -> app.dolphinSettings.allSources().size
+        }
+        card("Manage repositories", "$count of $total enabled" + if (shared) " · Shared Dolphin settings" else "") {
+            chooseUniversalRepositories()
+        }
+        subsection("SOURCE INFORMATION")
+        card("View repository catalogue", "See enabled sources, repository addresses and supported formats") {
+            showCheatRepositoryCatalogue()
+        }
+        card("Check repository configuration", "Audit selected sources, duplicate IDs and repository addresses") {
+            showRepositoryConfigurationAudit()
+        }
+        card("Check repository availability", "Live GitHub connection test for each enabled source") {
+            checkRepositoryAvailability()
+        }
+        line(when (cheatSystem) {
+            "3DS" -> "3DS sources require Title-ID text files compatible with the 3DS cheat parser."
+            "PS2" -> "PS2 sources require PNACH files. Enhancement patches may not be gameplay cheats."
+            else -> "Wii and GameCube share Dolphin-compatible INI sources, but search for their own games."
+        }, true)
+        card("Custom repositories", when (cheatSystem) {
+            "3DS" -> "Configure a compatible GitHub Title-ID source"
+            "PS2" -> "Only verified built-in PNACH layouts are currently supported"
+            else -> "Add a compatible Dolphin GitHub source"
+        }) {
+            when (cheatSystem) {
+                "3DS" -> editSource()
+                "PS2" -> note(Ui.Kind.ERROR, "Custom PS2 repositories require a compatible PNACH provider.")
+                else -> addDolphinRepository()
+            }
+        }
+        subsection("DATABASE & UPDATES")
+        line("Cached cheat data: ${app.cache.cheatDataSize() / 1024} KB", true)
+        card(if (cheatSystem == "3DS") "Refresh repository data" else "Repository update behaviour", if (cheatSystem == "3DS") "Refresh the 3DS Title-ID database" else "Cheats are checked when you open a game") {
+            if (cheatSystem == "3DS") refreshNow()
+            else note(Ui.Kind.OK, "${cheatSystem} repositories are queried when checking games.")
+        }
+        line("Recommended mode favours original or complementary sources; mirrors are not counted as new cheat databases.", true)
+        if (cheatSystem == "PS2") line("Some PS2 repositories contain widescreen, FPS or compatibility patches. Review each code before enabling it.", true)
+        line("Selected sources are stored on this device. Installed cheat files are not changed by repository settings.", true)
+    }
+
+    /** Read-only audit view. Displays the actual configured catalogue, not guessed providers. */
+    private fun showCheatRepositoryCatalogue() {
+        val entries: List<Triple<String, String, String>> = when (cheatSystem) {
+            "3DS" -> {
+                val enabled = app.settings.sources().map { it.id }.toSet()
+                RecommendedCheatSources.all.map { source ->
+                    Triple(source.name, "${if (source.config.owner == "FlagBrew") "Primary database" else "Sharkive mirror / fork"} · ${source.description}",
+                        "${if (source.config.id in enabled) "Enabled" else "Disabled"} · github.com/${source.config.owner}/${source.config.repo} · ${source.config.basePath}")
+                }
+            }
+            "PS2" -> {
+                val enabled = Ps2Settings(this).sources().map { it.id }.toSet()
+                Ps2CheatSources.all.map { source ->
+                    Triple(source.name, "${if (source.name.contains("Patch", ignoreCase = true) || source.name.contains("Enhancement", ignoreCase = true)) "Patches / enhancements" else "Gameplay cheats"} · ${source.description}",
+                        "${if (source.id in enabled) "Enabled" else "Disabled"} · github.com/${source.owner}/${source.repo} · ${source.path}")
+                }
+            }
+            else -> {
+                val enabled = app.dolphinSettings.sources().map { it.id }.toSet()
+                app.dolphinSettings.allSources().map { source ->
+                    Triple(source.name, source.description,
+                        "${if (source.id in enabled) "Enabled" else "Disabled"} · github.com/${source.owner}/${source.repo} · ${source.path}")
+                }
+            }
+        }
+        val message = entries.joinToString("\n\n") { (name, description, location) ->
+            "$name\n$description\n$location"
+        }
+        MaterialAlertDialogBuilder(this)
+            .setTitle("$cheatSystem · Repository catalogue")
+            .setMessage(message.ifBlank { "No compatible repositories configured." })
+            .setPositiveButton("Close", null)
+            .show()
+    }
+
+    /** Local configuration audit only: does not claim that a remote repository is online. */
+    private fun showRepositoryConfigurationAudit() {
+        data class AuditSource(val id: String, val name: String, val owner: String, val repo: String, val path: String)
+        val catalogue: List<AuditSource>
+        val enabled: Set<String>
+        when (cheatSystem) {
+            "3DS" -> {
+                catalogue = RecommendedCheatSources.all.map {
+                    AuditSource(it.config.id, it.name, it.config.owner, it.config.repo, it.config.basePath)
+                }
+                enabled = app.settings.sources().map { it.id }.toSet()
+            }
+            "PS2" -> {
+                catalogue = Ps2CheatSources.all.map {
+                    AuditSource(it.id, it.name, it.owner, it.repo, it.path)
+                }
+                enabled = Ps2Settings(this).sources().map { it.id }.toSet()
+            }
+            else -> {
+                catalogue = app.dolphinSettings.allSources().map {
+                    AuditSource(it.id, it.name, it.owner, it.repo, it.path)
+                }
+                enabled = app.dolphinSettings.sources().map { it.id }.toSet()
+            }
+        }
+        val issues = mutableListOf<String>()
+        if (enabled.isEmpty()) issues.add("No repositories are enabled.")
+        val duplicateIds = catalogue.groupBy { it.id }.filterValues { it.size > 1 }.keys
+        if (duplicateIds.isNotEmpty()) issues.add("Duplicate source IDs: ${duplicateIds.joinToString()}")
+        val unknown = enabled - catalogue.map { it.id }.toSet()
+        if (unknown.isNotEmpty()) issues.add("Selected sources missing from built-in catalogue: ${unknown.joinToString()}. These may be custom sources.")
+        catalogue.filter { it.id in enabled }.forEach { source ->
+            if (source.owner.isBlank() || source.repo.isBlank() ||
+                source.owner.contains('/') || source.repo.contains('/')) {
+                issues.add("${source.name}: invalid GitHub owner/repository configuration.")
+            }
+            if (source.path.startsWith("/") || source.path.contains("..")) {
+                issues.add("${source.name}: check repository subfolder path.")
+            }
+        }
+        val summary = "${enabled.size} selected · ${catalogue.size} catalogued\n\n" +
+            if (issues.isEmpty()) "No local configuration problems detected." else
+                issues.joinToString("\n\n", prefix = "Configuration notices:\n")
+        MaterialAlertDialogBuilder(this)
+            .setTitle("$cheatSystem · Source configuration")
+            .setMessage(summary + "\n\nThis is an offline settings audit. It does not test GitHub availability or verify that cheat files exist.")
+            .setPositiveButton("Close", null)
+            .show()
+    }
+
+    /** Network check deliberately does not imply the repository contains usable cheat files. */
+    private fun checkRepositoryAvailability() {
+        data class RemoteSource(val name: String, val owner: String, val repo: String, val branch: String)
+        val enabled: List<RemoteSource> = when (cheatSystem) {
+            "3DS" -> app.settings.sources().map { RemoteSource(it.displayName, it.owner, it.repo, it.branch) }
+            "PS2" -> Ps2Settings(this).sources().map { RemoteSource(it.name, it.owner, it.repo, it.branch) }
+            else -> app.dolphinSettings.sources().map { RemoteSource(it.name, it.owner, it.repo, it.branch) }
+        }
+        if (enabled.isEmpty()) {
+            note(Ui.Kind.ERROR, "Select at least one repository first.")
+            return
+        }
+        note(Ui.Kind.INFO, "Checking ${enabled.size} repositories…")
+        lifecycleScope.launch {
+            val report = withContext(Dispatchers.IO) {
+                enabled.map { source ->
+                    val url = "https://api.github.com/repos/${source.owner}/${source.repo}/branches/${source.branch}"
+                    val result = try {
+                        val connection = (java.net.URL(url).openConnection() as java.net.HttpURLConnection)
+                        connection.connectTimeout = 6000
+                        connection.readTimeout = 6000
+                        connection.setRequestProperty("Accept", "application/vnd.github+json")
+                        connection.setRequestProperty("User-Agent", "BreezyRetroLoader")
+                        try {
+                            when (connection.responseCode) {
+                                200 -> "Reachable"
+                                404 -> "Not found (repository or branch)"
+                                403, 429 -> "Rate-limited / access restricted"
+                                else -> "HTTP ${connection.responseCode}"
+                            }
+                        } finally { connection.disconnect() }
+                    } catch (e: Exception) { "Connection failed: ${e.javaClass.simpleName}" }
+                    "${source.name}: $result"
+                }.joinToString("\n\n")
+            }
+            if (!isFinishing && !isDestroyed) {
+                MaterialAlertDialogBuilder(this@SettingsActivity)
+                    .setTitle("$cheatSystem · Live repository availability")
+                    .setMessage(report + "\n\nReachable means GitHub responded; it does not guarantee compatible cheat files or coverage for a particular game.")
+                    .setPositiveButton("Close", null).show()
+            }
+        }
+    }
+
+    private fun chooseUniversalRepositories() {
+        val labels: List<String>
+        val ids: List<String>
+        val selected: MutableSet<String>
+        val recommended: Set<String>
+        when (cheatSystem) {
+            "3DS" -> {
+                val all = RecommendedCheatSources.all
+                labels = all.map { "${it.name}\n${it.description}" }
+                ids = all.map { it.config.id }
+                selected = app.settings.sources().map { it.id }.toMutableSet()
+                recommended = setOf(all.first().config.id)
+            }
+            "PS2" -> {
+                val all = Ps2CheatSources.all
+                labels = all.map { "${it.name}\n${it.description}" }
+                ids = all.map { it.id }
+                selected = Ps2Settings(this).sources().map { it.id }.toMutableSet()
+                recommended = all.filter { it.name == "PCSX2 Cheats & Patches" || it.name == "PCSX2 Cheats Collection" }.map { it.id }.toSet()
+            }
+            else -> {
+                val all = app.dolphinSettings.allSources()
+                labels = all.map { "${it.name}\n${it.description}" }
+                ids = all.map { it.id }
+                selected = app.dolphinSettings.sources().map { it.id }.toMutableSet()
+                recommended = com.breezybuilds.cheatstation.provider.DolphinCheatSources.builtIn.map { it.id }.toSet()
+            }
+        }
+        fun save(chosen: Set<String>) {
+            if (chosen.isEmpty()) { note(Ui.Kind.ERROR, "Select at least one repository."); return }
+            when (cheatSystem) {
+                "3DS" -> app.settings.saveSources(RecommendedCheatSources.all.filter { it.config.id in chosen }.map { it.config })
+                "PS2" -> Ps2Settings(this).saveSources(Ps2CheatSources.all.filter { it.id in chosen })
+                else -> app.dolphinSettings.saveSources(app.dolphinSettings.allSources().filter { it.id in chosen })
+            }
+            render()
+        }
+        val options = arrayOf("Use all compatible repositories", "Use recommended repositories", "Choose repositories manually")
+        MaterialAlertDialogBuilder(this).setTitle("$cheatSystem · Repository mode")
+            .setItems(options) { _, mode ->
+                when (mode) {
+                    0 -> {
+                        if (cheatSystem == "PS2") {
+                            MaterialAlertDialogBuilder(this)
+                                .setTitle("Include PS2 enhancement patches?")
+                                .setMessage("Use all includes gameplay cheats and repositories containing widescreen, FPS and compatibility patches. These aren't all ordinary cheat codes. Codes are not automatically enabled.")
+                                .setPositiveButton("Use all") { _, _ -> save(ids.toSet()) }
+                                .setNegativeButton("Cancel", null).show()
+                        } else save(ids.toSet())
+                    }
+                    1 -> save(recommended)
+                    else -> {
+                        MaterialAlertDialogBuilder(this)
+                            .setTitle("$cheatSystem · Select repositories")
+                            .setMultiChoiceItems(labels.toTypedArray(), ids.map { it in selected }.toBooleanArray()) { _, index, checked ->
+                                if (checked) selected.add(ids[index]) else selected.remove(ids[index])
+                            }
+                            .setPositiveButton("Save selection") { _, _ -> save(selected) }
+                            .setNegativeButton("Cancel", null).show()
+                    }
+                }
+            }.setNegativeButton("Cancel", null).show()
     }
 
     private fun renderBackupSettings() {
@@ -772,20 +976,16 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         MaterialAlertDialogBuilder(this)
-            .setTitle("Folder problem")
+            .setTitle("Folder access not verified")
             .setMessage(err)
-            .setPositiveButton("Use anyway") { _, _ ->
-                if (slot == StorageManager.Slot.ROOT) {
-                    app.storage.forceRoot(uri)
-
-                    app.storage.selected3dsEmulatorPackage?.let { packageName ->
-                        app.storage.saveEmulatorRootUri(packageName, uri)
-                    }
+            .setPositiveButton("Choose again") { _, _ ->
+                when (slot) {
+                    StorageManager.Slot.ROOT -> pickRoot.launch(app.storage.pickerHint())
+                    StorageManager.Slot.GAMES -> pickGames.launch(null)
+                    StorageManager.Slot.CHEATS -> pickCheats.launch(null)
                 }
-
-                render()
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton("Later", null)
             .show()
     }
 
@@ -858,22 +1058,19 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun chooseRecommendedSource() {
         val sources = RecommendedCheatSources.all
-        val current = app.settings.source().id
-        var selected = sources.indexOfFirst { it.config.id == current }.coerceAtLeast(0)
-        val labels = sources.mapIndexed { index, it ->
-            val marker = if (it.config.id == current) "✓ " else ""
-            marker + it.name + "\n" + it.description
-        }.toTypedArray()
-        val dlg = MaterialAlertDialogBuilder(this)
-            .setTitle("Recommended cheat sources")
-            .setSingleChoiceItems(labels, selected) { _, which -> selected = which }
-            .setPositiveButton("Use selected") { _, _ ->
-                app.settings.saveSource(sources[selected].config)
-                render()
-                note(Ui.Kind.OK, "Using ${sources[selected].name}. Refresh the cheat database to download from it.")
+        val selected = app.settings.sources().map { it.id }.toMutableSet()
+        MaterialAlertDialogBuilder(this)
+            .setTitle("3DS repositories · select multiple")
+            .setMultiChoiceItems(sources.map { "${it.name}\n${it.description}" }.toTypedArray(),
+                sources.map { it.config.id in selected }.toBooleanArray()) { _, which, checked ->
+                if (checked) selected += sources[which].config.id else selected -= sources[which].config.id
             }
-            .setNegativeButton("Cancel", null)
-            .show()
+            .setNeutralButton("Use all") { _, _ -> app.settings.saveSources(sources.map { it.config }); render() }
+            .setPositiveButton("Save selected") { _, _ ->
+                if (selected.isEmpty()) note(Ui.Kind.ERROR, "Select at least one repository.")
+                else { app.settings.saveSources(sources.filter { it.config.id in selected }.map { it.config }); render() }
+            }
+            .setNegativeButton("Cancel", null).show()
     }
 
     private fun editSource() {

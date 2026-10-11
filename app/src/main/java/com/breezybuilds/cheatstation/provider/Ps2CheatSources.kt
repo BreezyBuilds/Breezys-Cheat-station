@@ -9,7 +9,8 @@ object Ps2CheatSources {
     val all = listOf(
         Ps2CheatSource("PCSX2 Cheats & Patches", "Current community PS2 cheats in PCSX2/NetherSX2 PNACH format.", "heavyjam-code", "pcsx2-cheats-n-patches"),
         Ps2CheatSource("Official PCSX2 Patches", "Official PCSX2 PNACH patches including widescreen, 60 FPS and game fixes.", "PCSX2", "pcsx2_patches", path = "patches"),
-        Ps2CheatSource("PCSX2 Cheats Collection", "Large community collection of serial/CRC matched PNACH cheats.", "xs1l3n7x", "pcsx2_cheats_collection")
+        Ps2CheatSource("PCSX2 Cheats Collection", "Large community collection of serial/CRC matched PNACH cheats.", "xs1l3n7x", "pcsx2_cheats_collection"),
+        Ps2CheatSource("Gabominated PCSX2 Enhancements", "Community widescreen, 50/60 FPS and improvement patches (not ordinary gameplay cheats).", "Gabominated", "PCSX2", path = "PCSX2 Patches")
     )
     val default = all.first()
 }
