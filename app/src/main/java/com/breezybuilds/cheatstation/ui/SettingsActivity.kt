@@ -654,7 +654,7 @@ class SettingsActivity : AppCompatActivity() {
                 else -> app.dolphinSettings.allSources().size
             }
             val state = if (enabled == 0) "Needs setup" else "$enabled of $total sources enabled"
-            val shared = if (id == "Wii" || id == "GameCube") " · Shared Dolphin configuration" else ""
+            val shared = if (id == "Wii" || id == "GameCube") " · Dolphin sources shared" else ""
             card(cheatSystemLabel(id), state + shared) {
                 cheatSystem = id
                 navigate(Page.CHEAT_SYSTEM)
@@ -662,7 +662,7 @@ class SettingsActivity : AppCompatActivity() {
         }
         subsection("DATABASE & UPDATES")
         line("Cached cheat data: ${app.cache.cheatDataSize() / 1024} KB", true)
-        card("Refresh 3DS database", "Update the cheat index using selected sources") { refreshNow() }
+        line("Refresh the 3DS database from its system-specific source settings.", true)
         card("Clear downloaded cheat cache", "Remove cached searches without touching installed emulator cheats") {
             MaterialAlertDialogBuilder(this).setTitle("Clear cached cheat data?")
                 .setMessage("Downloaded cheat lists are removed from this app. Installed cheats are not touched.")
@@ -696,6 +696,7 @@ class SettingsActivity : AppCompatActivity() {
         card("Choose repositories", "Use all, recommended or a custom selection") { chooseUniversalRepositories() }
         card("Browse source catalogue", "View each repository, its file format and enabled state") { showCheatRepositoryCatalogue() }
         subsection("SOURCE TOOLS")
+        line("Repository health checks test GitHub access only; they do not validate file formats or game coverage.", true)
         card("Check live availability", "Test enabled GitHub repositories") { checkRepositoryAvailability() }
         card("Check configuration", "Audit repository addresses and selections") { showRepositoryConfigurationAudit() }
         card("Add custom repository", when (cheatSystem) {
@@ -785,19 +786,19 @@ class SettingsActivity : AppCompatActivity() {
                 val source = entries[index]
                 val details = buildString {
                     append(source.description)
-                    append("\\n\\nStatus: ")
+                    append("\n\nStatus: ")
                     append(if (source.enabled) "Enabled" else "Disabled")
-                    append("\\nFormat: ")
+                    append("\nFormat: ")
                     append(source.format)
-                    append("\\nGitHub: ")
+                    append("\nGitHub: ")
                     append(source.owner)
                     append("/")
                     append(source.repo)
-                    append("\\nBranch: ")
+                    append("\nBranch: ")
                     append(source.branch)
-                    append("\\nFolder: ")
+                    append("\nFolder: ")
                     append(source.folder.ifBlank { "(repository root)" })
-                    append("\\n\\nRepository availability and compatible cheat coverage must be checked separately.")
+                    append("\n\nRepository availability and compatible cheat coverage must be checked separately.")
                 }
                 MaterialAlertDialogBuilder(this)
                     .setTitle(source.name)
