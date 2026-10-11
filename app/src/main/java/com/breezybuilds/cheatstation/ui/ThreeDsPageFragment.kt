@@ -61,7 +61,7 @@ class ThreeDsPageFragment : Fragment() {
         banner.setOnClickListener {
             banner.visibility = View.GONE
         }
-        content.addView(banner, Ui.lp())
+        content.addView(banner, Ui.lp().apply { setMargins(Ui.dp(ctx, 12), Ui.dp(ctx, 8), Ui.dp(ctx, 12), Ui.dp(ctx, 8)) })
 
         adapter = GameAdapter(
             ::describe,

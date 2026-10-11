@@ -57,7 +57,7 @@ class Ps2PageFragment : Fragment() {
         root.addView(progress, Ui.lp())
 
         banner = Ui.banner(ctx)
-        root.addView(banner, Ui.lp())
+        root.addView(banner, Ui.lp().apply { setMargins(Ui.dp(ctx, 12), Ui.dp(ctx, 8), Ui.dp(ctx, 12), Ui.dp(ctx, 8)) })
 
         setupStatus = Ui.tv(ctx, "", 12f)
         setupStatus.visibility = View.GONE
@@ -139,10 +139,8 @@ class Ps2PageFragment : Fragment() {
         if (::adapter.isInitialized) {
             adapter.setShowTechnicalDetails(app.settings.showTechnicalGameDetails)
             // The details activity writes the authoritative merged count when it finishes.
-            if (countJob?.isActive != true) {
-                cheatCounts.clear()
-                updateCheatCounts(games)
-            }
+            cheatCounts.clear()
+            updateCheatCounts(games)
             updateAdapter()
         }
 
@@ -193,8 +191,7 @@ class Ps2PageFragment : Fragment() {
     private fun cheatLabel(game: Game): String {
         val count = cheatCounts[game.titleId]
             ?: GameCheatStatus.get(requireContext(), "ps2", game.titleId)
-        return if (game.titleId in checkingCounts) "Scanning cheats…"
-            else count?.let { "$it cheats available" }
+        return count?.let { "$it cheats available" }
             ?: if (game.titleId in checkingCounts) "Scanning cheats…"
             else if (game.titleId in failedCounts) "Unable to check cheats" else "Check cheats"
     }
@@ -279,8 +276,6 @@ class Ps2PageFragment : Fragment() {
         cheatCounts.clear()
         // Remove stale labels immediately, including the persistent 7-day summaries.
         games.forEach { GameCheatStatus.remove(requireContext(), "ps2", it.titleId) }
-        checkingCounts.clear()
-        checkingCounts.addAll(games.map { it.titleId })
         updateAdapter()
         scan()
     }

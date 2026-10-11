@@ -214,14 +214,15 @@ object Ui {
                 ContextCompat.getColor(ctx, android.R.color.holo_red_light)
         }
 
-    /** Dismissible, self-expiring notices used by all system pages. */
+    /** Compact, theme-matched notice used throughout the app. */
     fun banner(ctx: Context): TextView = TextView(ctx).apply {
-        setPadding(dp(ctx, 14), dp(ctx, 10), dp(ctx, 14), dp(ctx, 10))
+        setPadding(dp(ctx, 16), dp(ctx, 12), dp(ctx, 16), dp(ctx, 12))
         textSize = 13f
+        setTextColor(0xFFEAF1FF.toInt())
+        maxLines = 3
         visibility = View.GONE
-        setCompoundDrawablesWithIntrinsicBounds(0, 0, com.breezybuilds.cheatstation.R.drawable.ic_close, 0)
         compoundDrawablePadding = dp(ctx, 12)
-        // The entire notice is tappable, making the close action accessible on small screens.
+        setCompoundDrawablesWithIntrinsicBounds(0, 0, com.breezybuilds.cheatstation.R.drawable.ic_close, 0)
         setOnClickListener { hide(this) }
     }
 
@@ -229,14 +230,32 @@ object Ui {
 
     fun show(b: TextView, kind: Kind, msg: String) {
         noticeTimers.remove(b)?.let { b.removeCallbacks(it) }
-        b.setBackgroundColor(kind.color)
+        val (fill, stroke) = when (kind) {
+            Kind.INFO -> 0xFF162B45.toInt() to 0xFF355B83.toInt()
+            Kind.OK -> 0xFF142C2B.toInt() to 0xFF31675A.toInt()
+            Kind.WARN -> 0xFF2A271F.toInt() to 0xFF6D5736.toInt()
+            Kind.ERROR -> 0xFF302128.toInt() to 0xFF824354.toInt()
+        }
+        b.background = GradientDrawable().apply {
+            setColor(fill)
+            cornerRadius = dp(b.context, 12).toFloat()
+            setStroke(dp(b.context, 1), stroke)
+        }
         b.text = msg
         b.visibility = View.VISIBLE
-        val duration = when (kind) {
-            Kind.OK -> 3_000L
-            Kind.INFO -> 5_000L
-            Kind.WARN -> 8_000L
-            Kind.ERROR -> 0L // Errors remain visible until dismissed.
+        // Progress messages remain visible while work continues; completion replaces them.
+        val isProgress = kind == Kind.INFO && (
+            msg.contains("updating", ignoreCase = true) ||
+            msg.contains("scanning", ignoreCase = true) ||
+            msg.contains("refreshing", ignoreCase = true) ||
+            msg.contains("checking", ignoreCase = true)
+        )
+        val duration = when {
+            isProgress -> 0L
+            kind == Kind.OK -> 4_000L
+            kind == Kind.INFO -> 5_000L
+            kind == Kind.WARN -> 9_000L
+            else -> 0L
         }
         if (duration > 0) {
             val task = Runnable { b.visibility = View.GONE; noticeTimers.remove(b) }

@@ -79,7 +79,7 @@ class SettingsActivity : AppCompatActivity() {
         root.addView(toolbar, Ui.lp())
 
         banner = Ui.banner(ctx)
-        root.addView(banner, Ui.lp())
+        root.addView(banner, Ui.lp().apply { setMargins(Ui.dp(ctx, 12), Ui.dp(ctx, 8), Ui.dp(ctx, 12), Ui.dp(ctx, 8)) })
 
         content = Ui.vbox(ctx, 8).apply {
             setPadding(
