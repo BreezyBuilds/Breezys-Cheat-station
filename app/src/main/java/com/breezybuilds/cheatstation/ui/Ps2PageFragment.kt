@@ -32,6 +32,8 @@ class Ps2PageFragment : Fragment() {
     private var games: List<Game> = emptyList()
     private var busy = false
     private val cheatCounts = mutableMapOf<String, Int>()
+    private val checkingCounts = mutableSetOf<String>()
+    private val failedCounts = mutableSetOf<String>()
     private var forceRefreshCounts = false
     private var countJob: Job? = null
 
@@ -189,11 +191,17 @@ class Ps2PageFragment : Fragment() {
     private fun cheatLabel(game: Game): String {
         val count = cheatCounts[game.titleId]
             ?: GameCheatStatus.get(requireContext(), "ps2", game.titleId)
-        return count?.let { "$it cheats available" } ?: "Check cheats"
+        return count?.let { "$it cheats available" }
+            ?: if (game.titleId in checkingCounts) "Scanning cheats…"
+            else if (game.titleId in failedCounts) "Unable to check cheats" else "Check cheats"
     }
 
     private fun updateCheatCounts(items: List<Game>, useSavedCounts: Boolean = true) {
         countJob?.cancel()
+        checkingCounts.clear()
+        failedCounts.clear()
+        checkingCounts.addAll(items.map { it.titleId }.filter { !cheatCounts.containsKey(it) && (!useSavedCounts || GameCheatStatus.get(requireContext(), "ps2", it) == null) })
+        updateAdapter()
         countJob = viewLifecycleOwner.lifecycleScope.launch {
             for (game in items) {
                 val id = game.titleId
@@ -210,11 +218,13 @@ class Ps2PageFragment : Fragment() {
                         is com.breezybuilds.cheatstation.data.CheatResult.Unavailable ->
                             if (result.kind == com.breezybuilds.cheatstation.provider.ProviderError.NOT_FOUND) 0 else null
                     }
+                    if (count == null) failedCounts.add(id)
                     if (count != null) {
                         cheatCounts[id] = count
                         GameCheatStatus.put(requireContext(), "ps2", id, count)
                     }
                 }
+                checkingCounts.remove(id)
                 updateAdapter()
             }
         }

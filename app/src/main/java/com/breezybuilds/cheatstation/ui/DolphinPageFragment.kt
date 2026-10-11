@@ -32,7 +32,8 @@ class DolphinPageFragment(
     private lateinit var recycler: RecyclerView
     private lateinit var adapter: DolphinGameAdapter
     private val cheatCounts = mutableMapOf<String, Int>()
-    private var forceRefreshCounts = false
+    private val checkingCounts = mutableSetOf<String>()
+    private val failedCounts = mutableSetOf<String>()
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -47,6 +48,7 @@ class DolphinPageFragment(
 
         adapter = DolphinGameAdapter(
             countFor = { game -> cheatCounts[game.titleId] ?: GameCheatStatus.get(requireContext(), platform.name, game.titleId) },
+            statusFor = { game -> if (game.titleId in checkingCounts) "Scanning cheats…" else if (game.titleId in failedCounts) "Unable to check cheats" else "Check cheats" },
             showTechnicalDetails = (requireActivity().application as App).settings.showTechnicalGameDetails
         ) { game -> openCheats(game) }
 
@@ -89,8 +91,6 @@ class DolphinPageFragment(
             adapter.setShowTechnicalDetails(
                 (requireActivity().application as App).settings.showTechnicalGameDetails
             )
-            cheatCounts.clear()
-            updateCheatCounts((requireActivity().application as App).cache.loadSystemGames(cacheKey()))
         }
     }
 
@@ -108,7 +108,6 @@ class DolphinPageFragment(
     }
 
     fun rescanGames() {
-        forceRefreshCounts = true
         scan()
     }
 
@@ -125,13 +124,17 @@ class DolphinPageFragment(
     }
 
 
-    private fun updateCheatCounts(items: List<Game>, useSavedCounts: Boolean = true) {
+    private fun updateCheatCounts(items: List<Game>) {
+        checkingCounts.clear()
+        failedCounts.clear()
+        checkingCounts.addAll(items.map { it.titleId }.filter { !cheatCounts.containsKey(it) && GameCheatStatus.get(requireContext(), platform.name, it) == null })
+        adapter.notifyDataSetChanged()
         viewLifecycleOwner.lifecycleScope.launch {
             val application = requireActivity().application as App
             for (game in items) {
                 val id = game.titleId
                 if (cheatCounts.containsKey(id)) continue
-                val cached = if (useSavedCounts) GameCheatStatus.get(requireContext(), platform.name, id) else null
+                val cached = GameCheatStatus.get(requireContext(), platform.name, id)
                 if (cached != null) {
                     cheatCounts[id] = cached
                 } else {
@@ -142,11 +145,13 @@ class DolphinPageFragment(
                             if (e.kind == ProviderError.NOT_FOUND) 0 else null
                         } catch (_: Exception) { null }
                     }
+                    if (count == null) failedCounts.add(id)
                     if (count != null) {
                         cheatCounts[id] = count
                         GameCheatStatus.put(requireContext(), platform.name, id, count)
                     }
                 }
+                checkingCounts.remove(id)
                 adapter.notifyDataSetChanged()
             }
         }
@@ -178,10 +183,7 @@ class DolphinPageFragment(
                 application.cache.saveSystemGames(cacheKey(), result.games)
                 LibraryRefresh.scanned(requireContext(), cacheKey(), gamesSignature())
                 adapter.submitList(result.games)
-                val force = forceRefreshCounts
-                forceRefreshCounts = false
-                if (force) cheatCounts.clear()
-                updateCheatCounts(result.games, useSavedCounts = !force)
+                updateCheatCounts(result.games)
             }
 
             scanning = false
@@ -222,6 +224,7 @@ class DolphinPageFragment(
 
 private class DolphinGameAdapter(
     private val countFor: (Game) -> Int?,
+    private val statusFor: (Game) -> String,
     private var showTechnicalDetails: Boolean,
     private val onClick: (Game) -> Unit
 ) : RecyclerView.Adapter<DolphinGameAdapter.GameViewHolder>() {
@@ -299,7 +302,7 @@ private class DolphinGameAdapter(
         fun bind(game: Game) {
             title.text = game.title
             val count = countFor(game)
-            GameCheatStatus.style(availability, count?.let { "$it cheats available" } ?: "Check cheats")
+            GameCheatStatus.style(availability, count?.let { "$it cheats available" } ?: statusFor(game))
             details.text = "${game.titleId}  •  ${game.source}"
             details.visibility = if (showTechnicalDetails) View.VISIBLE else View.GONE
 

@@ -34,20 +34,12 @@ internal object GameCheatStatus {
                 view.text = "✕  No cheats found"
                 view.setTextColor(Color.rgb(232, 116, 116))
             }
-            value.startsWith("Checking", true) -> {
-                view.text = "○  Checking cheats…"
+            value.startsWith("Scanning", true) || value.startsWith("Checking", true) -> {
+                view.text = "◌  Scanning cheats…"
                 view.setTextColor(Color.rgb(157, 172, 194))
             }
-            value.startsWith("Check failed", true) -> {
-                view.text = "Check failed · Retry"
-                view.setTextColor(Color.rgb(232, 174, 116))
-            }
-            value.startsWith("Checking", true) -> {
-                view.text = "○  Checking cheats…"
-                view.setTextColor(Color.rgb(157, 172, 194))
-            }
-            value.startsWith("Check failed", true) -> {
-                view.text = "Check failed · Retry"
+            value.startsWith("Check failed", true) || value.startsWith("Unable", true) -> {
+                view.text = "⚠  Unable to check cheats"
                 view.setTextColor(Color.rgb(232, 174, 116))
             }
             else -> {
