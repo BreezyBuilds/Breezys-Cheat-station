@@ -23,7 +23,7 @@ import com.breezybuilds.cheatstation.emulator.RetroSystemRegistry
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 /** Two-step setup. All downloads require an explicit user action. */
-class RetroSetupActivity : AppCompatActivity() {
+class RetroSetupActivity : RetroThemedActivity() {
     companion object {
         const val PREFS = "retro_loader_setup"
         const val FINISHED = "finished"
@@ -49,10 +49,10 @@ class RetroSetupActivity : AppCompatActivity() {
     private var cachedResult: UniversalRoms.Result? = null
     private lateinit var body: LinearLayout
     private lateinit var footer: LinearLayout
-    private val ink = 0xFFE9EDF5.toInt()
-    private val muted = 0xFFACB9CD.toInt()
-    private val bg = 0xFF0A1220.toInt()
-    private val line = 0xFF29384E.toInt()
+    private val ink get() = Ui.Appearance.foreground(this)
+    private val muted get() = Ui.Appearance.secondary(this)
+    private val bg get() = Ui.Appearance.background(this)
+    private val line get() = Ui.Appearance.divider(this)
     private fun d(v: Int) = Ui.dp(this, v)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -137,7 +137,7 @@ class RetroSetupActivity : AppCompatActivity() {
         if (bold) setTypeface(typeface, Typeface.BOLD)
     }
     private fun shape(fill: Int, stroke: Int = line) = GradientDrawable().apply {
-        cornerRadius = d(15).toFloat(); setColor(fill); setStroke(d(1), stroke)
+        cornerRadius = 0f; setColor(fill); setStroke(d(1), stroke)
     }
     private fun addText(value: String, size: Float, bold: Boolean = false, color: Int = ink, top: Int = 0) {
         body.addView(text(value, size, bold, color), LinearLayout.LayoutParams(-1, -2).apply { topMargin = d(top) })
@@ -146,10 +146,7 @@ class RetroSetupActivity : AppCompatActivity() {
         parent.addView(View(this).apply { setBackgroundColor(line) }, LinearLayout.LayoutParams(-1, d(1)))
     }
     private fun action(label: String, onClick: () -> Unit) {
-        val button = Ui.button(this, label, onClick = onClick).apply {
-            backgroundTintList = android.content.res.ColorStateList.valueOf(0xFFFFFFFF.toInt())
-            setTextColor(0xFF2459A6.toInt())
-        }
+        val button = Ui.button(this, label, onClick = onClick)
         footer.addView(button, LinearLayout.LayoutParams(-1, d(48)).apply { topMargin = d(7) })
     }
     private fun showStep() {
@@ -157,7 +154,7 @@ class RetroSetupActivity : AppCompatActivity() {
         pendingFinishAfterScan = false
         scanRunning = false
         body.removeAllViews(); footer.removeAllViews()
-        addText("BREEZY'S RETRO LOADER  ·  ${step + 1} OF 3", 11f, true, 0xFF93B2DA.toInt())
+        addText("BREEZY'S RETRO LOADER  ·  ${step + 1} OF 3", 11f, true, Ui.Appearance.action(this))
         addText(when(step) { 0 -> "Choose your systems"; 1 -> "Your emulators"; else -> "Find your games" }, 25f, true, top = 12)
         addText(when(step) { 0 -> "Select the consoles you'd like to use. You can change these later."; 1 -> "We've checked for compatible emulators already on your device."; else -> "Select one ROMs folder. We'll look inside its subfolders for your games." }, 14f, color = muted, top = 7)
         when(step) { 0 -> showSystems(); 1 -> showEmulators(); else -> showRoms() }
@@ -174,7 +171,7 @@ class RetroSetupActivity : AppCompatActivity() {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(d(14), d(12), d(14), d(12))
-                background = shape(0xFF17273B.toInt())
+                background = shape(Ui.Appearance.surface(this@RetroSetupActivity))
                 isClickable = true
                 isFocusable = true
                 contentDescription = "$manufacturer, ${if (expanded) "expanded" else "collapsed"}"
@@ -182,8 +179,8 @@ class RetroSetupActivity : AppCompatActivity() {
             header.addView(text(manufacturer, 16f, true), LinearLayout.LayoutParams(0, -2, 1f))
             val selectedCount = systems.count { it.id in selected }
             header.addView(text(if (systems.isEmpty()) "Coming later" else "$selectedCount / ${systems.size} selected", 12f, color = muted))
-            header.addView(text(if (expanded) "  ▴" else "  ▾", 20f, color = 0xFFB4CEEF.toInt()))
-            header.setOnClickListener {
+            header.addView(text(if (expanded) "  ▴" else "  ▾", 20f, color = Ui.Appearance.action(this)))
+            Ui.interact(this@RetroSetupActivity, header) {
                 if (expanded) expandedManufacturers.remove(manufacturer) else expandedManufacturers.add(manufacturer)
                 showStep()
             }
@@ -200,18 +197,20 @@ class RetroSetupActivity : AppCompatActivity() {
                             orientation = LinearLayout.VERTICAL
                             gravity = Gravity.CENTER_VERTICAL
                             setPadding(d(14), d(9), d(12), d(9))
-                            background = shape(if (chosen) 0xFF203650.toInt() else 0xFF142033.toInt(),
-                                if (chosen) 0xFF668FC3.toInt() else line)
+                            background = shape(if (chosen) Ui.Appearance.raised(this@RetroSetupActivity) else Ui.Appearance.surface(this@RetroSetupActivity),
+                                if (chosen) Ui.Appearance.action(this@RetroSetupActivity) else line)
                             isClickable = true
                             isFocusable = true
                             contentDescription = "${system.title}, ${if (chosen) "selected" else "not selected"}"
                         }
                         val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-                        head.addView(text(system.symbol, 19f, color = 0xFFB4CEEF.toInt()), LinearLayout.LayoutParams(0, -2, 1f))
-                        head.addView(text(if (chosen) "✓" else "○", 18f, color = if (chosen) 0xFF8BD0B1.toInt() else muted))
+                        head.addView(ConsolePackIcon(this, system.id).apply {
+                            contentDescription = "${system.title} console illustration"
+                        }, LinearLayout.LayoutParams(0, d(34), 1f))
+                        head.addView(text(if (chosen) "✓" else "○", 18f, color = if (chosen) Ui.Appearance.positive(this@RetroSetupActivity) else muted))
                         tile.addView(head)
                         tile.addView(text(system.title, 14f, true), LinearLayout.LayoutParams(-1, -2).apply { topMargin = d(4) })
-                        tile.setOnClickListener {
+                        Ui.interact(this@RetroSetupActivity, tile) {
                             if (system.id in selected) selected.remove(system.id) else selected.add(system.id)
                             showStep()
                         }
@@ -241,7 +240,7 @@ class RetroSetupActivity : AppCompatActivity() {
             setPadding(0, d(9), 0, d(3))
             isClickable = true
             isFocusable = true
-            setOnClickListener { finishSetup() }
+            Ui.interact(this@RetroSetupActivity, this) { finishSetup() }
         })
     }
     private fun showEmulators() {
@@ -274,7 +273,7 @@ class RetroSetupActivity : AppCompatActivity() {
             val panel = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 setPadding(d(14), d(12), d(14), d(12))
-                background = shape(0xFF142237.toInt())
+                background = shape(Ui.Appearance.surface(this@RetroSetupActivity))
             }
             val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
             val labels = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -289,9 +288,9 @@ class RetroSetupActivity : AppCompatActivity() {
                 LinearLayout.LayoutParams(-1, -2).apply { topMargin = d(12) })
             options.forEach { (pkg, name) ->
                 choices.addView(text("${if (pkg == chosen?.first) "◉" else "○"}  $name · Installed", 14f,
-                    color = if (pkg == chosen?.first) 0xFF8CD2AD.toInt() else ink).apply {
+                    color = if (pkg == chosen?.first) Ui.Appearance.positive(this@RetroSetupActivity) else ink).apply {
                     setPadding(d(8), d(10), d(8), d(10))
-                    setOnClickListener {
+                    Ui.interact(this@RetroSetupActivity, this) {
                         if (system == "3DS") storage.setSelected3dsEmulator(pkg)
                         else prefs.edit().putString("preferred_emulator_$system", pkg).apply()
                         showStep()
@@ -303,12 +302,12 @@ class RetroSetupActivity : AppCompatActivity() {
                 RetroCatalog.entries.firstOrNull { it.id == entryId }?.let { entry ->
                     choices.addView(text("View compatible emulators ›", 13f).apply {
                         setPadding(d(8), d(12), d(8), d(12))
-                        setOnClickListener { showDetails(entry) }
+                        Ui.interact(this@RetroSetupActivity, this) { showDetails(entry) }
                     })
                 }
             }
             panel.addView(choices)
-            header.setOnClickListener { choices.visibility = if (choices.visibility == View.GONE) View.VISIBLE else View.GONE }
+            Ui.interact(this@RetroSetupActivity, header) { choices.visibility = if (choices.visibility == View.GONE) View.VISIBLE else View.GONE }
             body.addView(panel, LinearLayout.LayoutParams(-1, -2).apply { topMargin = d(10) })
         }
         if ("3DS" in selected) {
@@ -330,7 +329,7 @@ class RetroSetupActivity : AppCompatActivity() {
         action("Continue to ROMs folder") { step = 2; showStep() }
         footer.addView(text("Refresh detection  ·  Change systems", 13f, color = muted).apply {
             gravity = Gravity.CENTER; setPadding(0, d(10), 0, d(6)); isClickable = true
-            setOnClickListener { MaterialAlertDialogBuilder(this@RetroSetupActivity).setItems(arrayOf("Refresh detection", "Change systems")) { _, which ->
+            Ui.interact(this@RetroSetupActivity, this) { MaterialAlertDialogBuilder(this@RetroSetupActivity).setItems(arrayOf("Refresh detection", "Change systems")) { _, which ->
                 if (which == 1) step = 0
                 showStep()
             }.show() }
@@ -352,10 +351,10 @@ class RetroSetupActivity : AppCompatActivity() {
                 val row = text("${if (scanMode == mode) "◉" else "○"}  ${labels.first}\n     ${labels.second}", 14f,
                     color = if (scanMode == mode) ink else muted).apply {
                     setPadding(d(14), d(12), d(14), d(12))
-                    background = shape(if (scanMode == mode) 0xFF203650.toInt() else 0xFF142033.toInt())
+                    background = shape(if (scanMode == mode) Ui.Appearance.raised(this@RetroSetupActivity) else Ui.Appearance.surface(this@RetroSetupActivity))
                     isClickable = true
                     isFocusable = true
-                    setOnClickListener {
+                    Ui.interact(this@RetroSetupActivity, this) {
                         if (pendingScanMode != mode) {
                             pendingScanMode = mode
                             scanConfirmed = false
@@ -380,7 +379,7 @@ class RetroSetupActivity : AppCompatActivity() {
             val panel = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 setPadding(d(16), d(14), d(16), d(14))
-                background = shape(0xFF101F32.toInt())
+                background = shape(Ui.Appearance.surface(this@RetroSetupActivity))
             }
             body.addView(panel, LinearLayout.LayoutParams(-1, -2).apply { topMargin = d(14) })
             val progressRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
@@ -391,7 +390,7 @@ class RetroSetupActivity : AppCompatActivity() {
             panel.addView(progressRow)
             val progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
                 isIndeterminate = true
-                progressTintList = android.content.res.ColorStateList.valueOf(0xFF6D9EE6.toInt())
+                progressTintList = android.content.res.ColorStateList.valueOf(Ui.Appearance.action(this@RetroSetupActivity))
             }
             panel.addView(progressBar, LinearLayout.LayoutParams(-1, d(7)).apply { topMargin = d(12) })
             val explanation = text("Locating folders · total not known yet", 12f, color = muted)
@@ -399,7 +398,7 @@ class RetroSetupActivity : AppCompatActivity() {
             val filePanel = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 setPadding(d(16), d(14), d(16), d(14))
-                background = shape(0xFF101F32.toInt())
+                background = shape(Ui.Appearance.surface(this@RetroSetupActivity))
             }
             body.addView(filePanel, LinearLayout.LayoutParams(-1, -2).apply { topMargin = d(12) })
             filePanel.visibility = View.GONE
@@ -407,14 +406,14 @@ class RetroSetupActivity : AppCompatActivity() {
             filePanel.addView(fileHeader)
             val fileProgress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
                 isIndeterminate = true
-                progressTintList = android.content.res.ColorStateList.valueOf(0xFF6D9EE6.toInt())
+                progressTintList = android.content.res.ColorStateList.valueOf(Ui.Appearance.action(this@RetroSetupActivity))
             }
             filePanel.addView(fileProgress, LinearLayout.LayoutParams(-1, d(7)).apply { topMargin = d(12) })
             val fileDetails = text("Waiting to scan", 12f, color = muted)
             filePanel.addView(fileDetails, LinearLayout.LayoutParams(-1, -2).apply { topMargin = d(7) })
             val systemPanel = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
-                background = shape(0xFF101F32.toInt())
+                background = shape(Ui.Appearance.surface(this@RetroSetupActivity))
             }
             body.addView(systemPanel, LinearLayout.LayoutParams(-1, -2).apply { topMargin = d(12) })
             systemPanel.visibility = View.GONE
@@ -441,7 +440,7 @@ class RetroSetupActivity : AppCompatActivity() {
             val completion = text("Preparing your game library…\nDiscovery will be saved before you continue.", 12f, color = muted).apply {
                 gravity = Gravity.CENTER
                 setPadding(d(12), d(12), d(12), d(12))
-                background = shape(0xFF1B2A3E.toInt())
+                background = shape(Ui.Appearance.raised(this@RetroSetupActivity))
             }
             body.addView(completion, LinearLayout.LayoutParams(-1, -2).apply { topMargin = d(12) })
             completion.isClickable = false
@@ -453,7 +452,7 @@ class RetroSetupActivity : AppCompatActivity() {
                     val done = finished || system in completed
                     val active = !done && system == current
                     state.text = when { done -> "Complete"; active -> "Scanning"; else -> "Pending" }
-                    state.setTextColor(when { done -> 0xFF8BD0B1.toInt(); active -> 0xFF79A9EE.toInt(); else -> muted })
+                    state.setTextColor(when { done -> Ui.Appearance.positive(this@RetroSetupActivity); active -> Ui.Appearance.action(this@RetroSetupActivity); else -> muted })
                     details.text = when {
                         done -> if (count == 0) "No games found" else "$count games found"
                         active -> if (count == 0) "Checking files…" else "$count games found so far"
@@ -476,12 +475,12 @@ class RetroSetupActivity : AppCompatActivity() {
                 fileProgress.progress = if (scanSucceeded) 100 else 0
                 fileDetails.text = "${result.scanned} items checked · ${if (scanSucceeded) "Discovery saved" else "Retry required"}"
                 updateSystems(result.counts, null, emptySet(), scanSucceeded)
-                completion.background = shape(if (scanSucceeded) 0xFFFFFFFF.toInt() else 0xFF1B2A3E.toInt())
-                completion.setTextColor(if (scanSucceeded) 0xFF2459A6.toInt() else muted)
+                completion.background = shape(if (scanSucceeded) Ui.Appearance.action(this@RetroSetupActivity) else Ui.Appearance.raised(this@RetroSetupActivity))
+                completion.setTextColor(if (scanSucceeded) Ui.Appearance.onAction(this@RetroSetupActivity) else muted)
                 completion.text = if (scanSucceeded) "✓ Your game library is ready\nTap here to open your game library" else "Scan incomplete · Tap here to retry"
                 completion.isClickable = true
                 completion.isFocusable = true
-                completion.setOnClickListener {
+                Ui.interact(this@RetroSetupActivity, completion) {
                     if (scanSucceeded) finishSetup() else { cachedResult = null; showStep() }
                 }
             }
@@ -542,7 +541,11 @@ class RetroSetupActivity : AppCompatActivity() {
         if (root == null || !scanConfirmed) {
             addText("Choose a ROMs folder and press Start Scan before finishing setup.", 12f, color = muted, top = 12)
         }
-        action("Back to emulators") { step = 1; showStep() }
+        body.addView(text("‹  Back to emulators", 14f, color = muted).apply {
+            setPadding(d(4), d(18), d(4), d(18))
+            isClickable = true; isFocusable = true
+            Ui.interact(this@RetroSetupActivity, this) { step = 1; showStep() }
+        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = d(12) })
     }
     private fun showDetails(entry: RetroCatalog.Entry) {
         val detected = RetroCatalog.detectedName(this, entry)

@@ -1,0 +1,6 @@
+V2.1 icon-pack preview pass (apply after previous patches)
+- Appearance page now previews each icon pack independently before selection.
+- ConsolePackIcon accepts optional preview override, while existing callers keep persisted preference.
+- Pixel icons disable anti-aliasing and bitmap filtering for sharper edges.
+- No emulator/cheat engine files changed.
+Build not verified: Android SDK/Gradle wrapper unavailable in this archive.

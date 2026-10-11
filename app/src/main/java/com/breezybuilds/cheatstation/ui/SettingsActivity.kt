@@ -35,17 +35,26 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class SettingsActivity : AppCompatActivity() {
+class SettingsActivity : RetroThemedActivity() {
     private lateinit var content: android.widget.LinearLayout
     private lateinit var banner: TextView
     private lateinit var toolbar: MaterialToolbar
 
     private enum class Page {
-        HOME, SYSTEMS, THREE_DS, PS2, WII, GAMECUBE, CHEATS, CHEAT_SYSTEM, BACKUPS, ADVANCED, ABOUT
+        HOME, APPEARANCE, SYSTEMS, THREE_DS, PS2, WII, GAMECUBE, CHEATS, CHEAT_SYSTEM, BACKUPS, ADVANCED, ABOUT
     }
 
     private var page = Page.HOME
     private var cheatSystem = "3DS"
+    private var themeTransitionInProgress = false
+
+    // Theme changes are handled in this screen, not a second time by the base activity.
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString("retro_settings_page", page.name)
+        outState.putString("retro_cheat_system", cheatSystem)
+        super.onSaveInstanceState(outState)
+    }
 
     /** Identical identity labels across the four system-specific source pages. */
     private fun cheatSystemLabel(id: String): String = when (id) {
@@ -68,18 +77,25 @@ class SettingsActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        savedInstanceState?.getString("retro_settings_page")?.let { savedPage ->
+            page = Page.entries.firstOrNull { it.name == savedPage } ?: Page.HOME
+        }
+        cheatSystem = savedInstanceState?.getString("retro_cheat_system") ?: "3DS"
         val ctx = this
-        val root = Ui.vbox(ctx).apply { setBackgroundColor(0xFF0A111E.toInt()) }
+        val root = Ui.vbox(ctx).apply { setBackgroundColor(Ui.Appearance.background(ctx)) }
         Ui.edgeToEdge(root)
 
         toolbar = MaterialToolbar(ctx).apply {
             title = "Settings"
+            setBackgroundColor(Ui.Appearance.background(ctx))
+            setTitleTextColor(Ui.Appearance.foreground(ctx))
+            setNavigationIconTint(Ui.Appearance.foreground(ctx))
             setNavigationOnClickListener { goBack() }
         }
         root.addView(toolbar, Ui.lp())
 
         banner = Ui.banner(ctx)
-        root.addView(banner, Ui.lp().apply { setMargins(Ui.dp(ctx, 12), Ui.dp(ctx, 8), Ui.dp(ctx, 12), Ui.dp(ctx, 8)) })
+        root.addView(banner, Ui.lp().apply { setMargins(Ui.dp(ctx, 12), 0, Ui.dp(ctx, 12), 0) })
 
         content = Ui.vbox(ctx, 8).apply {
             setPadding(
@@ -99,13 +115,19 @@ class SettingsActivity : AppCompatActivity() {
         )
 
         setContentView(root)
+        window.statusBarColor = Ui.Appearance.background(this)
+        window.navigationBarColor = Ui.Appearance.background(this)
+        androidx.core.view.WindowInsetsControllerCompat(window, window.decorView).apply {
+            isAppearanceLightStatusBars = Ui.Appearance.theme(this@SettingsActivity) == "light"
+            isAppearanceLightNavigationBars = Ui.Appearance.theme(this@SettingsActivity) == "light"
+        }
         render()
 
         onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
             override fun handleOnBackPressed() = goBack()
         })
 
-        when (intent.getStringExtra("open_section")) {
+        if (savedInstanceState == null) when (intent.getStringExtra("open_section")) {
             "source" -> {
                 page = Page.CHEATS
                 window.decorView.post {
@@ -124,7 +146,7 @@ class SettingsActivity : AppCompatActivity() {
     private fun goBack() {
         page = when (page) {
             Page.HOME -> { finish(); return }
-            Page.SYSTEMS, Page.CHEATS, Page.BACKUPS, Page.ADVANCED, Page.ABOUT -> Page.HOME
+            Page.APPEARANCE, Page.SYSTEMS, Page.CHEATS, Page.BACKUPS, Page.ADVANCED, Page.ABOUT -> Page.HOME
             Page.THREE_DS, Page.PS2, Page.WII, Page.GAMECUBE -> Page.SYSTEMS
             Page.CHEAT_SYSTEM -> Page.CHEATS
         }
@@ -133,6 +155,7 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun pageTitle(): String = when (page) {
         Page.HOME -> "Settings"
+        Page.APPEARANCE -> "Appearance & Themes"
         Page.SYSTEMS -> "Systems"
         Page.THREE_DS -> "3DS"
         Page.PS2 -> "PlayStation 2"
@@ -342,7 +365,7 @@ class SettingsActivity : AppCompatActivity() {
         Ui.show(
             banner,
             Ui.Kind.INFO,
-            "${detected.name} detected. Select its data folder to give Breezy's Cheat Station access."
+            "${detected.name} detected. Select its data folder to give Breezy's Retro Loader access."
         )
 
         pickRoot.launch(st.pickerHint())
@@ -359,6 +382,7 @@ class SettingsActivity : AppCompatActivity() {
         content.addView(
             Ui.tv(this, title, 11f, bold = true).apply {
                 letterSpacing = 0.08f
+                setTextColor(Ui.Appearance.action(this@SettingsActivity))
                 setPadding(
                     Ui.dp(this@SettingsActivity, 2),
                     Ui.dp(this@SettingsActivity, 14),
@@ -373,10 +397,14 @@ class SettingsActivity : AppCompatActivity() {
     private fun render() {
         content.removeAllViews()
         toolbar.title = pageTitle()
+        toolbar.setBackgroundColor(Ui.Appearance.background(this))
+        toolbar.setTitleTextColor(Ui.Appearance.foreground(this))
+        toolbar.setNavigationIconTint(Ui.Appearance.foreground(this))
         toolbar.navigationIcon = if (page == Page.HOME) null else androidx.appcompat.content.res.AppCompatResources.getDrawable(this, androidx.appcompat.R.drawable.abc_ic_ab_back_material)
 
         when (page) {
             Page.HOME -> renderHome()
+            Page.APPEARANCE -> renderAppearance()
             Page.SYSTEMS -> renderSystems()
             Page.THREE_DS -> render3dsSettings()
             Page.PS2 -> renderPs2Settings()
@@ -400,10 +428,40 @@ class SettingsActivity : AppCompatActivity() {
         card("Systems", "Emulators, game folders and system-specific storage") { navigate(Page.SYSTEMS) }
 
         subsection("APP")
+        card("Appearance & Themes", "OLED Black, Grey Light, Navy and console colours") { navigate(Page.APPEARANCE) }
         card("Cheats & Sources", "Repositories and cheat databases by system") { navigate(Page.CHEATS) }
         card("Backups", "Manage automatic cheat backups") { navigate(Page.BACKUPS) }
         card("Advanced", "Updates, debugging and diagnostics") { navigate(Page.ADVANCED) }
         card("About", "Version and application information") { navigate(Page.ABOUT) }
+    }
+
+    private fun renderAppearance() {
+        subsection("MAIN APP THEME")
+        listOf("navy" to "Navy", "oled" to "OLED Black", "light" to "Grey Light").forEach { (id, name) ->
+            content.addView(Ui.selectionRow(this, name, when (id) { "navy" -> "Deep navy surfaces and cool blue accents"; "oled" -> "True black with subtle contrast"; else -> "Soft grey surfaces and dark text" }, Ui.Appearance.theme(this) == id, onClick = {
+                if (!themeTransitionInProgress && Ui.Appearance.theme(this) != id) {
+                    themeTransitionInProgress = true
+                    Ui.Appearance.setTheme(this, id)
+                    recreate()
+                }
+            }), Ui.lp())
+        }
+        subsection("ICON PACK")
+        listOf(
+            "outline" to ("Precision Outline" to "Fine, minimal console line drawings"),
+            "duotone" to ("Soft Duotone" to "Colourful hardware with depth and highlights"),
+            "pixel" to ("Retro Pixel" to "Detailed 8–16-bit pixel illustrations")
+        ).forEach { (id, labels) ->
+            content.addView(Ui.selectionRow(this, labels.first, labels.second, Ui.Appearance.iconPack(this) == id, onClick = {
+                Ui.Appearance.setIconPack(this, id)
+                render()
+            }, iconPreview = id), Ui.lp())
+        }
+        subsection("INTERACTIONS")
+        content.addView(Ui.selectionRow(this, "Haptic Feedback", "Gentle feedback when selecting an option", Ui.Appearance.haptics(this), onClick = {
+            Ui.Appearance.setHaptics(this, !Ui.Appearance.haptics(this))
+            render()
+        }), Ui.lp())
     }
 
     private fun renderSystems() {
@@ -426,9 +484,7 @@ class SettingsActivity : AppCompatActivity() {
             selected3ds?.name
         )
 
-        threeDsCard.setOnClickListener {
-            navigate(Page.THREE_DS)
-        }
+        Ui.interact(this, threeDsCard) { navigate(Page.THREE_DS) }
 
         content.addView(threeDsCard, Ui.lp())
 
@@ -442,9 +498,7 @@ class SettingsActivity : AppCompatActivity() {
             ps2?.name
         )
 
-        ps2Card.setOnClickListener {
-            navigate(Page.PS2)
-        }
+        Ui.interact(this, ps2Card) { navigate(Page.PS2) }
 
         content.addView(
             ps2Card,
@@ -464,7 +518,7 @@ class SettingsActivity : AppCompatActivity() {
         }
         listOf("Wii" to Page.WII, "GameCube" to Page.GAMECUBE).forEach { (name, destination) ->
             val card = Ui.statusPanel(this, name, dolphinState.toStatus(), dolphin?.name)
-            card.setOnClickListener { navigate(destination) }
+            Ui.interact(card.context, card) { navigate(destination) }
             content.addView(card, Ui.lp().apply { topMargin = Ui.dp(this@SettingsActivity, 2) })
 
         }
@@ -999,10 +1053,11 @@ class SettingsActivity : AppCompatActivity() {
             setOnCheckedChangeListener { _, on -> app.settings.debugLog = on; AppLog.verbose = on }
         }, Ui.lp())
         btn("View debug log") { viewLog() }
+        btn("View last crash report") { viewLastCrash() }
     }
 
     private fun renderAbout() {
-        subsection("BREEZY'S CHEAT STATION")
+        subsection("BREEZY'S RETRO LOADER")
         line("Version ${BuildConfigVersion.name(this)}")
         line("A companion utility that finds your games and installs compatible cheat files for supported emulators. It works alongside supported emulator projects rather than belonging to any one emulator project.", true)
         line("Cheat codes come from third-party sources; use them at your own risk.", true)
@@ -1306,12 +1361,35 @@ class SettingsActivity : AppCompatActivity() {
             }.setNegativeButton("Cancel", null).show()
     }
 
+    /** An app-owned crash record remains readable after Android restarts the process. */
+    private fun viewLastCrash() {
+        val crashFile = java.io.File(filesDir, "retro_loader_last_crash.txt")
+        val report = runCatching { crashFile.takeIf { it.exists() }?.readText() }
+            .getOrNull()?.takeIf { it.isNotBlank() } ?: "No recorded Java crash."
+        val reportView = Ui.tv(this, report, 11f, mono = true).apply {
+            setTextIsSelectable(true)
+            setPadding(Ui.dp(this@SettingsActivity, 16), Ui.dp(this@SettingsActivity, 8),
+                Ui.dp(this@SettingsActivity, 16), Ui.dp(this@SettingsActivity, 8))
+        }
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Last crash report")
+            .setView(ScrollView(this).apply { addView(reportView) })
+            .setPositiveButton("Copy") { _, _ ->
+                (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
+                    .setPrimaryClip(ClipData.newPlainText("Retro Loader crash report", report))
+                note(Ui.Kind.OK, "Crash report copied.")
+            }
+            .setNeutralButton("Clear") { _, _ -> crashFile.delete() }
+            .setNegativeButton("Close", null)
+            .show()
+    }
+
     // ---- log ------------------------------------------------------------------------------------
     private fun viewLog() {
         val tv = Ui.tv(this, AppLog.dump().ifBlank { "(log is empty)" }, 11f, mono = true).apply { setTextIsSelectable(true); setPadding(Ui.dp(this@SettingsActivity, 16), Ui.dp(this@SettingsActivity, 8), Ui.dp(this@SettingsActivity, 16), 0) }
         MaterialAlertDialogBuilder(this).setTitle("Debug log").setView(ScrollView(this).apply { addView(tv) })
             .setPositiveButton("Copy") { _, _ ->
-                (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Breezy's Cheat Station log", AppLog.dump()))
+                (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Breezy's Retro Loader log", AppLog.dump()))
                 note(Ui.Kind.OK, "Log copied to the clipboard.")
             }
             .setNeutralButton("Clear") { _, _ -> AppLog.clear() }

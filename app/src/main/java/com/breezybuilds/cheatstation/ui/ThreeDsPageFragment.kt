@@ -58,9 +58,7 @@ class ThreeDsPageFragment : Fragment() {
         banner = Ui.banner(ctx)
         banner.setCompoundDrawablesWithIntrinsicBounds(0, 0, R.drawable.ic_close, 0)
         banner.setCompoundDrawablePadding(Ui.dp(ctx, 8))
-        banner.setOnClickListener {
-            banner.visibility = View.GONE
-        }
+        Ui.interact(ctx, banner) { banner.visibility = View.GONE }
         content.addView(banner, Ui.lp().apply { setMargins(Ui.dp(ctx, 12), Ui.dp(ctx, 8), Ui.dp(ctx, 12), Ui.dp(ctx, 8)) })
 
         adapter = GameAdapter(

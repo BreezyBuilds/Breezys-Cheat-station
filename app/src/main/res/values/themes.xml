@@ -1,13 +1,50 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.BreezyCheatStation" parent="Theme.Material3.DayNight.NoActionBar">
-        <item name="colorPrimary">@color/brand</item>
-        <item name="colorSecondary">@color/brand_dark</item>
+        <item name="colorPrimary">#8FB5F2</item>
+        <item name="colorOnPrimary">#101B30</item>
+        <item name="colorSecondary">#ACB9CD</item>
+        <item name="colorControlActivated">#8FB5F2</item>
+        <item name="colorSurface">#17273B</item>
+        <item name="colorOnSurface">#F0F5FF</item>
+        <item name="colorSurfaceVariant">#24354C</item>
+        <item name="colorOnSurfaceVariant">#B4C2D7</item>
+        <item name="colorOutline">#3D4B60</item>
+        <item name="android:windowBackground">#0A111E</item>
+        <item name="android:statusBarColor">#0A111E</item>
+        <item name="android:navigationBarColor">#0A111E</item>
         <item name="android:windowLightStatusBar">false</item>
-        <item name="android:statusBarColor">@color/breezy_background</item>
-        <item name="android:navigationBarColor">@color/breezy_background</item>
-        <item name="android:windowBackground">@color/breezy_background</item>
-        <item name="colorSurface">@color/breezy_surface</item>
-        <item name="colorOnSurface">@color/breezy_on_surface</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+    <style name="Theme.BreezyCheatStation.Navy" parent="Theme.BreezyCheatStation" />
+    <style name="Theme.BreezyCheatStation.Oled" parent="Theme.BreezyCheatStation">
+        <item name="colorPrimary">#F2F2F2</item>
+        <item name="colorOnPrimary">#101010</item>
+        <item name="colorSecondary">#C3C3C3</item>
+        <item name="colorControlActivated">#F2F2F2</item>
+        <item name="colorSurface">#101010</item>
+        <item name="colorOnSurface">#F5F5F5</item>
+        <item name="colorSurfaceVariant">#1E1E1E</item>
+        <item name="colorOnSurfaceVariant">#BEBEBE</item>
+        <item name="colorOutline">#424242</item>
+        <item name="android:windowBackground">#000000</item>
+        <item name="android:statusBarColor">#000000</item>
+        <item name="android:navigationBarColor">#000000</item>
+    </style>
+    <style name="Theme.BreezyCheatStation.Light" parent="Theme.BreezyCheatStation">
+        <item name="colorPrimary">#315F9C</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorSecondary">#49637F</item>
+        <item name="colorControlActivated">#315F9C</item>
+        <item name="colorSurface">#FFFFFF</item>
+        <item name="colorOnSurface">#202938</item>
+        <item name="colorSurfaceVariant">#E5EAF1</item>
+        <item name="colorOnSurfaceVariant">#4B5565</item>
+        <item name="colorOutline">#B8C2CF</item>
+        <item name="android:windowBackground">#E8E9EC</item>
+        <item name="android:statusBarColor">#E8E9EC</item>
+        <item name="android:navigationBarColor">#E8E9EC</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
     </style>
 </resources>

@@ -28,7 +28,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class DolphinCheatsActivity : AppCompatActivity() {
+class DolphinCheatsActivity : RetroThemedActivity() {
 
     private lateinit var status: TextView
     private lateinit var search: EditText
@@ -49,14 +49,14 @@ class DolphinCheatsActivity : AppCompatActivity() {
         gameTitle = intent.getStringExtra("title") ?: "Game"
         titleId = intent.getStringExtra("titleId") ?: ""
         val platform = intent.getStringExtra("platform") ?: ""
-        val platformAccent = Ui.systemAccent(if (platform.contains("wii", true)) "Wii" else "GameCube")
+        val platformAccent = Ui.Appearance.accent(this, if (platform.contains("wii", true)) "Wii" else "GameCube")
 
         val root = Ui.vbox(this)
         Ui.edgeToEdge(root)
 
         val toolbar = MaterialToolbar(this).apply {
             title = "Cheats"
-            setBackgroundColor(0xFF111B2B.toInt())
+            setBackgroundColor(Ui.Appearance.surface(this@DolphinCheatsActivity))
             subtitle = if (platform.contains("wii", true)) "NINTENDO WII" else "NINTENDO GAMECUBE"
             setSubtitleTextColor(platformAccent)
 
@@ -464,7 +464,7 @@ class DolphinCheatsActivity : AppCompatActivity() {
             val code = Ui.tv(ctx, codeText, 12f).apply {
                 setTextIsSelectable(true)
                 setPadding(Ui.dp(ctx, 10), Ui.dp(ctx, 10), Ui.dp(ctx, 10), Ui.dp(ctx, 10))
-                setBackgroundColor(0xFF182337.toInt())
+                setBackgroundColor(Ui.Appearance.raised(ctx))
                 visibility = View.GONE
             }
             val copy = Ui.button(ctx, "Copy code", filled = false) {
@@ -473,7 +473,7 @@ class DolphinCheatsActivity : AppCompatActivity() {
                 Toast.makeText(ctx, "Cheat code copied", Toast.LENGTH_SHORT).show()
             }.apply { visibility = View.GONE }
             val toggle = Ui.button(ctx, "View cheat code", filled = false) { }
-            toggle.setOnClickListener {
+            Ui.interact(ctx, toggle) {
                 val expanded = code.visibility != View.VISIBLE
                 code.visibility = if (expanded) View.VISIBLE else View.GONE
                 copy.visibility = if (expanded) View.VISIBLE else View.GONE
@@ -559,7 +559,7 @@ private class DolphinCheatAdapter(
         line.addView(details, Ui.lp(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         root.addView(line, Ui.lp())
         root.addView(View(ctx).apply {
-            setBackgroundColor(0xFF263345.toInt())
+            setBackgroundColor(Ui.Appearance.divider(ctx))
         }, Ui.lp(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(ctx, 1)))
         return VH(root, check, name, badge, details)
     }
@@ -574,12 +574,12 @@ private class DolphinCheatAdapter(
         }
         holder.name.text = cheat.name
         holder.badge.text = if (isInstalled) "Installed" else "Not installed"
-        holder.badge.setTextColor(if (isInstalled) 0xFF66DFA6.toInt() else 0xFFB3BED0.toInt())
-        holder.details.setTextColor(0xFF94A3B8.toInt())
-        holder.name.setOnClickListener { onDetails(cheat) }
-        holder.badge.setOnClickListener { onDetails(cheat) }
-        holder.details.setOnClickListener { onDetails(cheat) }
-        holder.root.setOnClickListener { onDetails(cheat) }
+        holder.badge.setTextColor(if (isInstalled) Ui.Appearance.positive(holder.itemView.context) else Ui.Appearance.secondary(holder.itemView.context))
+        holder.details.setTextColor(Ui.Appearance.secondary(holder.itemView.context))
+        Ui.interact(holder.name.context, holder.name) { onDetails(cheat) }
+        Ui.interact(holder.badge.context, holder.badge) { onDetails(cheat) }
+        Ui.interact(holder.details.context, holder.details) { onDetails(cheat) }
+        Ui.interact(holder.root.context, holder.root) { onDetails(cheat) }
     }
 
     override fun getItemCount(): Int = source().size

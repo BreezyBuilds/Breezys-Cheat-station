@@ -10,7 +10,7 @@ import android.widget.LinearLayout
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.card.MaterialCardView
 
-class WelcomeActivity : AppCompatActivity() {
+class WelcomeActivity : RetroThemedActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -23,6 +23,7 @@ class WelcomeActivity : AppCompatActivity() {
 
         val scroll = androidx.core.widget.NestedScrollView(this).apply {
             isFillViewport = true
+            setBackgroundColor(Ui.Appearance.background(this@WelcomeActivity))
         }
 
         val root = Ui.vbox(this, 20)
@@ -121,64 +122,49 @@ class WelcomeActivity : AppCompatActivity() {
         enabled: Boolean = true,
         onClick: () -> Unit
     ): MaterialCardView {
-        val card = MaterialCardView(this).apply {
-            radius = 0f
-            strokeWidth = 0
-            cardElevation = 0f
-            val systemKey = when {
-                title.contains("3DS") -> "3DS"
-                title.contains("PlayStation") -> "PS2"
-                title.contains("Wii") -> "WII"
-                else -> "GAMECUBE"
-            }
-            setCardBackgroundColor(Ui.systemAccent(systemKey))
-            isClickable = enabled
-            isFocusable = enabled
-            alpha = if (enabled) 1f else 0.55f
-
-            if (enabled) {
-                setOnClickListener { onClick() }
-            }
+        val key = when {
+            title.contains("3DS") -> "3DS"
+            title.contains("PlayStation") -> "PS2"
+            title.contains("Wii") -> "WII"
+            else -> "GAMECUBE"
         }
-
-        val box = Ui.vbox(this, 16).apply {
+        val base = Ui.Appearance.surface(this)
+        val start = Ui.Appearance.surface(this)
+        val end = Ui.Appearance.raised(this)
+        val card = MaterialCardView(this).apply {
+            radius = Ui.dp(this@WelcomeActivity, 9).toFloat()
+            strokeWidth = Ui.dp(this@WelcomeActivity, 1)
+            strokeColor = Ui.Appearance.divider(this@WelcomeActivity)
+            cardElevation = 0f
+            setCardBackgroundColor(base)
+            alpha = if (enabled) 1f else 0.55f
+            if (enabled) Ui.interact(this@WelcomeActivity, this, onClick)
+        }
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            val key = when {
-                title.contains("3DS") -> "3DS"
-                title.contains("PlayStation") -> "PS2"
-                title.contains("Wii") -> "WII"
-                else -> "GAMECUBE"
-            }
+            setPadding(Ui.dp(this@WelcomeActivity, 10), Ui.dp(this@WelcomeActivity, 9), Ui.dp(this@WelcomeActivity, 10), Ui.dp(this@WelcomeActivity, 9))
             background = android.graphics.drawable.GradientDrawable(
                 android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT,
-                intArrayOf(Ui.systemAccent(key), 0xFF152139.toInt())
-            ).apply { cornerRadius = 0f }
+                intArrayOf(start, end)
+            ).apply { cornerRadius = Ui.dp(this@WelcomeActivity, 9).toFloat() }
         }
-
-        box.addView(
-            Ui.tv(this, title, 19f, bold = true).apply {
-                setTextColor(android.graphics.Color.WHITE)
-            },
-            Ui.lp()
-        )
-
-        box.addView(
-            Ui.tv(this, description, 12f).apply {
-                setTextColor(0xFFE1EAF7.toInt())
-            },
-            Ui.lp().apply {
-                topMargin = Ui.dp(this@WelcomeActivity, 4)
-            }
-        )
-
-        card.addView(
-            box,
-            ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-        )
-
+        box.addView(ConsolePackIcon(this, key).apply {
+            contentDescription = "$title console"
+        }, LinearLayout.LayoutParams(Ui.dp(this, 54), Ui.dp(this, 54)).apply {
+            rightMargin = Ui.dp(this@WelcomeActivity, 9)
+        })
+        val labels = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        labels.addView(Ui.tv(this, title, 15f, bold = true).apply {
+            setTextColor(Ui.Appearance.foreground(this@WelcomeActivity))
+            maxLines = 2
+        })
+        labels.addView(Ui.tv(this, description, 11f, secondary = true).apply {
+            setTextColor(Ui.Appearance.secondary(this@WelcomeActivity))
+            maxLines = 2
+        })
+        box.addView(labels, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        card.addView(box, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         return card
     }
 }

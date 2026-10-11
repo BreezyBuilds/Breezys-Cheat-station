@@ -28,23 +28,23 @@ internal object GameCheatStatus {
         when {
             count != null && count > 0 -> {
                 view.text = "✓  $count ${if (count == 1) "cheat" else "cheats"} available"
-                view.setTextColor(Color.rgb(83, 210, 143))
+                view.setTextColor(Ui.Appearance.positive(view.context))
             }
             count == 0 || value.startsWith("No cheats", true) -> {
                 view.text = "✕  No cheats found"
-                view.setTextColor(Color.rgb(232, 116, 116))
+                view.setTextColor(Ui.Appearance.negative(view.context))
             }
             value.startsWith("Scanning", true) || value.startsWith("Checking", true) -> {
                 view.text = "◌  Scanning cheats…"
-                view.setTextColor(Color.rgb(157, 172, 194))
+                view.setTextColor(Ui.Appearance.secondary(view.context))
             }
             value.startsWith("Check failed", true) || value.startsWith("Unable", true) -> {
                 view.text = "⚠  Unable to check cheats"
-                view.setTextColor(Color.rgb(232, 174, 116))
+                view.setTextColor(Ui.Appearance.warning(view.context))
             }
             else -> {
                 view.text = "○  Check cheats"
-                view.setTextColor(Color.rgb(157, 172, 194))
+                view.setTextColor(Ui.Appearance.secondary(view.context))
             }
         }
     }

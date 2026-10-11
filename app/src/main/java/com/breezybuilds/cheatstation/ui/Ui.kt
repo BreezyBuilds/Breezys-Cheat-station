@@ -20,6 +20,47 @@ import com.breezybuilds.cheatstation.storage.StorageState
 
 /** Tiny helpers so the screens can be built in code (no layout XML needed). */
 object Ui {
+    /** Persisted appearance preferences. The existing Navy palette remains the default. */
+    object Appearance {
+        private const val PREF = "breezy_appearance"
+        fun theme(ctx: Context) = ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).getString("theme", "navy") ?: "navy"
+        fun iconPack(ctx: Context) = ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).getString("icon_pack", "duotone") ?: "duotone"
+        fun setIconPack(ctx: Context, value: String) { if (value in setOf("outline", "duotone", "pixel")) ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().putString("icon_pack", value).apply() }
+        fun haptics(ctx: Context) = ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).getBoolean("haptics", true)
+        fun setHaptics(ctx: Context, enabled: Boolean) { ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().putBoolean("haptics", enabled).apply() }
+        fun systemMode(ctx: Context) = ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).getString("system_mode", "matched") ?: "matched"
+        fun setTheme(ctx: Context, value: String) { if (value in setOf("navy", "oled", "light")) ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().putString("theme", value).apply() }
+        fun setSystemMode(ctx: Context, value: String) { if (value in setOf("matched", "theme", "console")) ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().putString("system_mode", value).apply() }
+        fun background(ctx: Context) = when (theme(ctx)) { "oled" -> 0xFF000000.toInt(); "light" -> 0xFFE8E9EC.toInt(); else -> 0xFF0A111E.toInt() }
+        fun foreground(ctx: Context) = if (theme(ctx) == "light") 0xFF202938.toInt() else 0xFFFFFFFF.toInt()
+        fun secondary(ctx: Context) = if (theme(ctx) == "light") 0xFF4B5565.toInt() else 0xFFACB9CD.toInt()
+        fun divider(ctx: Context) = when (theme(ctx)) { "oled" -> 0xFF333333.toInt(); "light" -> 0xFFBEC5CF.toInt(); else -> 0xFF253044.toInt() }
+        fun action(ctx: Context) = when (theme(ctx)) { "oled" -> 0xFFFFFFFF.toInt(); "light" -> 0xFF315F9C.toInt(); else -> 0xFF8FB5F2.toInt() }
+        fun raised(ctx: Context) = when (theme(ctx)) { "oled" -> 0xFF1D1D1D.toInt(); "light" -> 0xFFF6F8FB.toInt(); else -> 0xFF1E3047.toInt() }
+        fun positive(ctx: Context) = if (theme(ctx) == "light") 0xFF16704B.toInt() else 0xFF77D6AD.toInt()
+        fun negative(ctx: Context) = if (theme(ctx) == "light") 0xFFA4363E.toInt() else 0xFFFF9399.toInt()
+        fun warning(ctx: Context) = if (theme(ctx) == "light") 0xFF94601B.toInt() else 0xFFECC27D.toInt()
+        fun onAction(ctx: Context) = if (theme(ctx) == "light") 0xFFFFFFFF.toInt() else 0xFF111820.toInt()
+        fun surface(ctx: Context) = when (theme(ctx)) { "oled" -> 0xFF101010.toInt(); "light" -> 0xFFFFFFFF.toInt(); else -> 0xFF17273B.toInt() }
+        fun accent(ctx: Context, system: String): Int = when (systemMode(ctx)) {
+            "theme" -> action(ctx)
+            "console" -> when (system.uppercase()) {
+                "3DS" -> if (theme(ctx) == "light") 0xFF526174.toInt() else 0xFFD2D3D8.toInt()
+                "PS2" -> if (theme(ctx) == "light") 0xFF354466.toInt() else 0xFF9CABCA.toInt()
+                "WII" -> if (theme(ctx) == "light") 0xFF3B7082.toInt() else 0xFFCADDE6.toInt()
+                "GAMECUBE" -> if (theme(ctx) == "light") 0xFF5A4297.toInt() else 0xFFA994DC.toInt()
+                else -> systemAccent(system)
+            }
+            else -> when (system.uppercase()) {
+                "3DS" -> if (theme(ctx) == "light") 0xFFB72940.toInt() else systemAccent(system)
+                "PS2" -> if (theme(ctx) == "light") 0xFF205FBA.toInt() else systemAccent(system)
+                "WII" -> if (theme(ctx) == "light") 0xFF087EAB.toInt() else systemAccent(system)
+                "GAMECUBE" -> if (theme(ctx) == "light") 0xFF6840B8.toInt() else systemAccent(system)
+                else -> systemAccent(system)
+            }
+        }
+    }
+
     enum class Kind(val color: Int) { INFO(0x332196F3), OK(0x334CAF50), WARN(0x44FF9800), ERROR(0x44F44336) }
 
     fun dp(ctx: Context, v: Int) = (v * ctx.resources.displayMetrics.density).toInt()
@@ -36,7 +77,7 @@ object Ui {
             textSize = sp
             if (bold) setTypeface(typeface, Typeface.BOLD)
             if (mono) typeface = Typeface.MONOSPACE
-            if (secondary) setTextColor(attrColor(ctx, android.R.attr.textColorSecondary))
+            setTextColor(if (secondary) Appearance.secondary(ctx) else Appearance.foreground(ctx))
         }
 
     // One consistent dark button style across every settings page.
@@ -45,16 +86,16 @@ object Ui {
             text = label
             isAllCaps = false
             textSize = 13f
-            setTextColor(if (filled) 0xFF2459A6.toInt() else 0xFFE7EDF8.toInt())
-            backgroundTintList = android.content.res.ColorStateList.valueOf(if (filled) 0xFFFFFFFF.toInt() else 0xFF1A273B.toInt())
-            strokeColor = android.content.res.ColorStateList.valueOf(if (filled) 0xFFB8CBE8.toInt() else 0xFF34435A.toInt())
+            setTextColor(if (filled) Appearance.onAction(ctx) else Appearance.foreground(ctx))
+            backgroundTintList = android.content.res.ColorStateList.valueOf(if (filled) Appearance.action(ctx) else Appearance.surface(ctx))
+            strokeColor = android.content.res.ColorStateList.valueOf(if (filled) Appearance.divider(ctx) else Appearance.divider(ctx))
             strokeWidth = dp(ctx, 1)
             cornerRadius = dp(ctx, 12)
             minHeight = dp(ctx, 44)
             minimumHeight = dp(ctx, 44)
             insetTop = 0
             insetBottom = 0
-            setOnClickListener { onClick() }
+            interact(ctx, this, onClick)
         }
     fun compactButton(ctx: Context, label: String, onClick: () -> Unit): MaterialButton =
         button(ctx, label, true, onClick).apply {
@@ -69,10 +110,7 @@ object Ui {
 
 
     /** Shared visual tokens for the illustrated-console / clean-settings hybrid. */
-    private const val SURFACE = 0xFF151E2C.toInt()
-    private const val OUTLINE = 0xFF2A364A.toInt()
-    private const val MUTED = 0xFFABB8CD.toInt()
-
+    
     fun systemAccent(name: String): Int = when (name.uppercase()) {
         "3DS" -> 0xFFE34050.toInt()
         "PS2" -> 0xFF247EE8.toInt()
@@ -101,33 +139,79 @@ object Ui {
             cornerRadius = dp(ctx, radius).toFloat()
         }
 
-    /** Original in-app vector console silhouettes; no third-party logos or artwork. */
-    private fun icon(ctx: Context, title: String): View {
-        val drawable = when (title.uppercase()) {
-            "3DS", "NINTENDO 3DS" -> com.breezybuilds.cheatstation.R.drawable.ic_breezy_3ds
-            "PS2", "PLAYSTATION 2" -> com.breezybuilds.cheatstation.R.drawable.ic_breezy_ps2
-            "WII", "NINTENDO WII" -> com.breezybuilds.cheatstation.R.drawable.ic_breezy_wii
-            "GAMECUBE", "NINTENDO GAMECUBE" -> com.breezybuilds.cheatstation.R.drawable.ic_breezy_gamecube
-            else -> 0
+    /** Theme-aware, pack-switchable console drawings. */
+    private fun icon(ctx: Context, title: String): View = ConsolePackIcon(ctx, title).apply {
+        contentDescription = "$title console icon"
+    }
+
+    /** Shared press behaviour. Touch, keyboard and accessibility activation all use the
+     * same click callback; animations are purely decorative and never consume events. */
+    fun interact(ctx: Context, view: View, onClick: () -> Unit) {
+        view.isClickable = true
+        view.isFocusable = true
+        view.isHapticFeedbackEnabled = Appearance.haptics(ctx)
+        view.setOnTouchListener { v, event ->
+            when (event.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN -> {
+                    v.animate().cancel()
+                    v.animate().scaleX(0.985f).scaleY(0.985f).alpha(0.90f).setDuration(90L).start()
+                }
+                android.view.MotionEvent.ACTION_UP,
+                android.view.MotionEvent.ACTION_CANCEL -> {
+                    v.animate().cancel()
+                    v.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(140L).start()
+                }
+            }
+            false
         }
-        val accent = systemAccent(title)
-        val background = gradient(ctx, accent, 0xFF17253C.toInt(), 12)
-        return if (drawable != 0) ImageView(ctx).apply {
-            setImageResource(drawable)
-            scaleType = ImageView.ScaleType.FIT_CENTER
-            setPadding(dp(ctx, 7), dp(ctx, 7), dp(ctx, 7), dp(ctx, 7))
-            this.background = background
-            contentDescription = "$title console icon"
-        } else TextView(ctx).apply {
-            text = glyph(title)
-            gravity = android.view.Gravity.CENTER
-            textSize = 20f
-            setTypeface(typeface, Typeface.BOLD)
-            setTextColor(Color.WHITE)
-            this.background = background
-            contentDescription = "$title icon"
+        view.setOnClickListener {
+            // Also reset after keyboard / accessibility clicks, which may not emit touch UP.
+            view.animate().cancel()
+            view.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(140L).start()
+            if (Appearance.haptics(ctx))
+                view.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
+            onClick()
         }
     }
+
+    fun selectionRow(ctx: Context, title: String, description: String, selected: Boolean, onClick: () -> Unit, iconPreview: String? = null): MaterialCardView =
+        MaterialCardView(ctx).apply {
+            radius = dp(ctx, 2).toFloat()
+            strokeWidth = if (selected) dp(ctx, 1) else 0
+            strokeColor = if (selected) Appearance.action(ctx) else Appearance.divider(ctx)
+            setCardBackgroundColor(if (selected) Appearance.surface(ctx) else Appearance.background(ctx))
+            val row = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                setPadding(dp(ctx, 13), dp(ctx, if (iconPreview != null) 8 else 6), dp(ctx, 13), dp(ctx, if (iconPreview != null) 8 else 6))
+            }
+            val labels = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+            labels.addView(tv(ctx, title, 14f, bold = true))
+            labels.addView(tv(ctx, description, 12f, secondary = true).apply { setPadding(0, dp(ctx, 3), 0, 0) })
+            if (iconPreview != null) {
+                val previews = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
+                listOf("3DS", "PS2", "Wii", "GameCube").forEach { system ->
+                    previews.addView(ConsolePackIcon(ctx, system, iconPreview).apply {
+                        contentDescription = "$title, $system illustration preview"
+                    }, LinearLayout.LayoutParams(dp(ctx, 43), dp(ctx, 43)).apply {
+                        marginEnd = dp(ctx, 5)
+                    })
+                }
+                listOf("settings", "cheats", "sources", "backups").forEach { action ->
+                    previews.addView(CommonPackIcon(ctx, action, iconPreview).apply {
+                        contentDescription = "$title, $action illustration preview"
+                    }, LinearLayout.LayoutParams(dp(ctx, 35), dp(ctx, 43)).apply { marginEnd = dp(ctx, 2) })
+                }
+                labels.addView(previews, lp(ViewGroup.LayoutParams.MATCH_PARENT, dp(ctx, 46)).apply { topMargin = dp(ctx, 5) })
+            }
+            row.addView(labels, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            row.addView(tv(ctx, if (selected) "✓" else "○", 22f, bold = selected).apply {
+                gravity = android.view.Gravity.CENTER
+                setTextColor(if (selected) Appearance.action(ctx) else Appearance.secondary(ctx))
+            }, lp(dp(ctx, 30), dp(ctx, 32)))
+            addView(row)
+            interact(ctx, this, onClick)
+        }
 
     /** Clean grouped setting row; no technical detail is lost from the subtitle. */
     fun settingsCard(ctx: Context, title: String, subtitle: String, onClick: () -> Unit): MaterialCardView =
@@ -136,8 +220,8 @@ object Ui {
             isFocusable = true
             radius = 0f
             strokeWidth = 0
-            setCardBackgroundColor(0xFF0A111E.toInt())
-            setOnClickListener { onClick() }
+            setCardBackgroundColor(Appearance.background(ctx))
+            interact(ctx, this, onClick)
 
             val row = LinearLayout(ctx).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -146,9 +230,9 @@ object Ui {
             }
             // Navigation is identified by its text, not a decorative icon tile.
             val texts = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
-            texts.addView(tv(ctx, title, 14f, bold = true).apply { setTextColor(Color.WHITE) }, lp())
+            texts.addView(tv(ctx, title, 14f, bold = true).apply { setTextColor(Appearance.foreground(ctx)) }, lp())
             if (subtitle.isNotBlank()) texts.addView(tv(ctx, subtitle, 12f).apply {
-                setTextColor(MUTED)
+                setTextColor(Appearance.secondary(ctx))
                 maxLines = 2
                 ellipsize = android.text.TextUtils.TruncateAt.END
                 setPadding(0, dp(ctx, 3), 0, 0)
@@ -156,11 +240,11 @@ object Ui {
             row.addView(texts, lp(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             row.addView(tv(ctx, "›", 23f).apply {
                 gravity = android.view.Gravity.CENTER
-                setTextColor(MUTED)
+                setTextColor(Appearance.secondary(ctx))
             }, lp(dp(ctx, 22), ViewGroup.LayoutParams.WRAP_CONTENT))
             addView(row, lp())
             // Flat settings rows use a restrained separator, like the game library.
-            addView(View(ctx).apply { setBackgroundColor(0xFF253044.toInt()) },
+            addView(View(ctx).apply { setBackgroundColor(Appearance.divider(ctx)) },
                 lp(ViewGroup.LayoutParams.MATCH_PARENT, dp(ctx, 1)))
         }
 
@@ -170,11 +254,11 @@ object Ui {
             // System destinations are flat menu rows, not rounded action cards.
             radius = 0f
             strokeWidth = 0
-            val accent = systemAccent(system)
-            setCardBackgroundColor(accent)
+            val accent = Appearance.accent(ctx, system)
+            setCardBackgroundColor(Appearance.surface(ctx))
             val outer = LinearLayout(ctx).apply {
                 orientation = LinearLayout.VERTICAL
-                background = gradient(ctx, accent, 0xFF131D34.toInt(), 0)
+                background = gradient(ctx, Appearance.surface(ctx), Appearance.raised(ctx), 0)
                 setPadding(dp(ctx, 15), dp(ctx, 12), dp(ctx, 15), dp(ctx, 12))
             }
             val header = LinearLayout(ctx).apply {
@@ -191,17 +275,17 @@ object Ui {
                 else -> system
             }
             identity.addView(tv(ctx, displayName, 19f, bold = true).apply {
-                setTextColor(Color.WHITE)
+                setTextColor(Appearance.foreground(ctx))
             }, lp())
             if (!emulator.isNullOrBlank()) identity.addView(tv(ctx, emulator, 12f).apply {
-                setTextColor(0xFFE3EAF5.toInt())
+                setTextColor(Appearance.secondary(ctx))
                 setPadding(0, dp(ctx, 3), 0, 0)
             }, lp())
             header.addView(identity, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             val statusLabel = tv(ctx, "●  ${status.title}", 11f, bold = true).apply {
-                setTextColor(Color.WHITE)
+                setTextColor(Appearance.foreground(ctx))
                 setPadding(dp(ctx, 9), dp(ctx, 6), dp(ctx, 9), dp(ctx, 6))
-                background = gradient(ctx, 0xAA142337.toInt(), 0xAA142337.toInt(), 12)
+                background = gradient(ctx, Appearance.surface(ctx), Appearance.surface(ctx), 12)
                 maxLines = 2
             }
             header.addView(statusLabel, lp(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
@@ -233,7 +317,7 @@ object Ui {
     fun banner(ctx: Context): TextView = TextView(ctx).apply {
         setPadding(dp(ctx, 16), dp(ctx, 12), dp(ctx, 16), dp(ctx, 12))
         textSize = 13f
-        setTextColor(0xFFEAF1FF.toInt())
+        setTextColor(Appearance.foreground(ctx))
         maxLines = 3
         visibility = View.GONE
         compoundDrawablePadding = dp(ctx, 12)
@@ -245,12 +329,15 @@ object Ui {
 
     fun show(b: TextView, kind: Kind, msg: String) {
         noticeTimers.remove(b)?.let { b.removeCallbacks(it) }
-        val (fill, stroke) = when (kind) {
-            Kind.INFO -> 0xFF162B45.toInt() to 0xFF355B83.toInt()
-            Kind.OK -> 0xFF142C2B.toInt() to 0xFF31675A.toInt()
-            Kind.WARN -> 0xFF2A271F.toInt() to 0xFF6D5736.toInt()
-            Kind.ERROR -> 0xFF302128.toInt() to 0xFF824354.toInt()
+        val ctx = b.context
+        val (fill, stroke, label) = when (kind) {
+            Kind.INFO -> Triple(Appearance.surface(ctx), Appearance.action(ctx), Appearance.foreground(ctx))
+            Kind.OK -> Triple(Appearance.surface(ctx), Appearance.positive(ctx), Appearance.foreground(ctx))
+            Kind.WARN -> Triple(Appearance.surface(ctx), Appearance.warning(ctx), Appearance.foreground(ctx))
+            Kind.ERROR -> Triple(Appearance.surface(ctx), Appearance.negative(ctx), Appearance.foreground(ctx))
         }
+        b.setTextColor(label)
+        b.compoundDrawablesRelative.lastOrNull()?.mutate()?.setTint(label)
         b.background = GradientDrawable().apply {
             setColor(fill)
             cornerRadius = dp(b.context, 12).toFloat()
@@ -285,6 +372,7 @@ object Ui {
     }
 
     fun vbox(ctx: Context, pad: Int = 0): LinearLayout = LinearLayout(ctx).apply {
+        setBackgroundColor(Appearance.background(ctx))
         orientation = LinearLayout.VERTICAL
         setPadding(dp(ctx, pad), dp(ctx, pad), dp(ctx, pad), dp(ctx, pad))
     }

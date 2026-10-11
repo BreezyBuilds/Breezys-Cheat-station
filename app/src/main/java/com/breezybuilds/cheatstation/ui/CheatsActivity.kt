@@ -42,7 +42,7 @@ data class CheatRow(val key: String, val name: String, val remote: Cheat?, val i
     val codeCount: Int get() = (remote ?: installed)?.codeLines?.size ?: 0
 }
 
-class CheatsActivity : AppCompatActivity() {
+class CheatsActivity : RetroThemedActivity() {
     private lateinit var game: Game
     private var isPs2 = false
     private lateinit var banner: TextView
@@ -106,7 +106,7 @@ class CheatsActivity : AppCompatActivity() {
             }
             true
         }
-        toolbar.setBackgroundColor(0xFF111B2B.toInt())
+        toolbar.setBackgroundColor(Ui.Appearance.surface(this))
         toolbar.setSubtitleTextColor(Ui.systemAccent(if (isPs2) "PS2" else "3DS"))
         toolbar.subtitle = if (isPs2) "PLAYSTATION 2" else "NINTENDO 3DS"
         root.addView(toolbar, Ui.lp())
@@ -136,7 +136,7 @@ class CheatsActivity : AppCompatActivity() {
         })
 
         compatBanner = Ui.tv(ctx, "", 12f).apply {
-            setTextColor(0xFFD9A35D.toInt())
+            setTextColor(Ui.Appearance.warning(ctx))
             setPadding(Ui.dp(ctx, 16), 0, Ui.dp(ctx, 16), Ui.dp(ctx, 4))
             visibility = View.GONE
         }
@@ -408,7 +408,7 @@ class CheatsActivity : AppCompatActivity() {
             val code = Ui.tv(ctx, codeText, 12f).apply {
                 setTextIsSelectable(true)
                 setPadding(Ui.dp(ctx, 10), Ui.dp(ctx, 10), Ui.dp(ctx, 10), Ui.dp(ctx, 10))
-                setBackgroundColor(0xFF182337.toInt())
+                setBackgroundColor(Ui.Appearance.raised(ctx))
                 visibility = View.GONE
             }
             val copy = Ui.button(ctx, "Copy code", filled = false) {
@@ -417,7 +417,7 @@ class CheatsActivity : AppCompatActivity() {
                 Toast.makeText(ctx, "Cheat code copied", Toast.LENGTH_SHORT).show()
             }.apply { visibility = View.GONE }
             val toggle = Ui.button(ctx, "View cheat code", filled = false) { }
-            toggle.setOnClickListener {
+            Ui.interact(ctx, toggle) {
                 val expanded = code.visibility != View.VISIBLE
                 code.visibility = if (expanded) View.VISIBLE else View.GONE
                 copy.visibility = if (expanded) View.VISIBLE else View.GONE
@@ -505,7 +505,7 @@ class CheatAdapter(
         line.addView(badge, Ui.lp(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         line.addView(details, Ui.lp(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         root.addView(line, Ui.lp())
-        root.addView(View(ctx).apply { setBackgroundColor(0xFF263345.toInt()) }, Ui.lp(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(ctx, 1)))
+        root.addView(View(ctx).apply { setBackgroundColor(Ui.Appearance.divider(ctx)) }, Ui.lp(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(ctx, 1)))
         return VH(root, check, name, badge, details)
     }
 
@@ -516,11 +516,11 @@ class CheatAdapter(
         h.check.setOnCheckedChangeListener { _, checked -> onSelect(r.key, checked) }
         h.name.text = r.name
         h.badge.text = if (r.installed != null) "Installed" else "Not installed"
-        h.badge.setTextColor(if (r.installed != null) 0xFF66DFA6.toInt() else 0xFFB3BED0.toInt())
-        h.details.setTextColor(0xFF94A3B8.toInt())
-        h.name.setOnClickListener { onDetails(r) }
-        h.badge.setOnClickListener { onDetails(r) }
-        h.details.setOnClickListener { onDetails(r) }
+        h.badge.setTextColor(if (r.installed != null) Ui.Appearance.positive(h.itemView.context) else Ui.Appearance.secondary(h.itemView.context))
+        h.details.setTextColor(Ui.Appearance.secondary(h.itemView.context))
+        Ui.interact(h.name.context, h.name) { onDetails(r) }
+        Ui.interact(h.badge.context, h.badge) { onDetails(r) }
+        Ui.interact(h.details.context, h.details) { onDetails(r) }
     }
 
     override fun getItemCount() = rows().size

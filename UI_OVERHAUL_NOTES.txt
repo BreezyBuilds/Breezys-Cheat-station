@@ -1,0 +1,1 @@
+Stage 1 foundation: white/blue primary action buttons, flat Settings navigation rows, original console silhouette vector icons, console-accent subtitles on cheat details. Existing console gradient status panels and flat game library remain unchanged. Not Android-compiled; verify with Gradle. No repository or refresh logic changed.

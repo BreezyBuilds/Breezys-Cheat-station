@@ -23,7 +23,7 @@ internal class LibraryEmptyState(context: Context) : LinearLayout(context) {
         minimumHeight = dp(136)
         val backgroundShape = GradientDrawable().apply {
             cornerRadius = dp(14).toFloat()
-            setColor(Color.rgb(16, 31, 50))
+            setColor(Ui.Appearance.surface(context))
         }
         background = backgroundShape
 
@@ -31,23 +31,25 @@ internal class LibraryEmptyState(context: Context) : LinearLayout(context) {
             text = "⌕"
             textSize = 25f
             gravity = Gravity.CENTER
-            setTextColor(Color.rgb(127, 166, 220))
+            setTextColor(Ui.Appearance.action(context))
         }
         addView(icon, LayoutParams(LayoutParams.MATCH_PARENT, dp(32)))
         heading.apply {
             textSize = 16f
             gravity = Gravity.CENTER
-            setTextColor(Color.rgb(241, 245, 251))
+            setTextColor(Ui.Appearance.foreground(context))
         }
         addView(heading, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
         detail.apply {
             textSize = 13f
             gravity = Gravity.CENTER
-            setTextColor(Color.rgb(169, 186, 209))
+            setTextColor(Ui.Appearance.secondary(context))
             setPadding(0, dp(4), 0, dp(8))
         }
         addView(detail, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
         bar.isIndeterminate = true
+        bar.setIndicatorColor(Ui.Appearance.action(context))
+        bar.trackColor = Ui.Appearance.divider(context)
         addView(bar, LayoutParams(LayoutParams.MATCH_PARENT, dp(5)).apply {
             marginStart = dp(32); marginEnd = dp(32)
         })

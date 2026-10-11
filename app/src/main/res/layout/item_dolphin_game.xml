@@ -34,8 +34,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
                 android:text="Check cheats"
-                android:textSize="12sp"
-                android:textColor="#A9B6CD" />
+                android:textSize="12sp" />
             <TextView
                 android:id="@+id/dolphin_game_details"
                 android:layout_width="match_parent"
@@ -50,13 +49,12 @@
             android:layout_width="18dp"
             android:layout_height="wrap_content"
             android:text="›"
-            android:textSize="25sp"
-            android:textColor="#A9B6CD" />
+            android:textSize="25sp" />
     </LinearLayout>
     <View
         android:layout_width="match_parent"
         android:layout_height="1dp"
         android:layout_marginStart="16dp"
         android:layout_marginEnd="16dp"
-        android:background="#293141" />
+        android:background="?attr/colorOutline" />
 </LinearLayout>

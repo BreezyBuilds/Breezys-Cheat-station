@@ -1,0 +1,5 @@
+v2.1 next: unified interaction reliability
+Base: Breezy-Current-Full-UI.tar.gz plus cumulative v2.1-next-UI patch.
+Changed: Ui.interact now cancels conflicting animations, resets on click, and keeps touch unconsumed for accessibility.
+All cheat repositories, installers, emulator detection and storage code unchanged.
+Android build not verified in this environment.

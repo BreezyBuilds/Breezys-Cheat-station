@@ -1,0 +1,1 @@
+v2.0 Stage 1C: Dolphin provider fixes. Exact-file HTTP 403 is no longer treated as not found; rate-limit errors are classified; truncated/malformed GitHub indexes no longer silently imply no cheats. Apply after 1A and 1B. GitHub Actions compilation and device testing required. This is not the full Stage 1C UI overhaul.

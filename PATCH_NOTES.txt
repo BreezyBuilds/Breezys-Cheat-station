@@ -1,0 +1,1 @@
+Apply after UI Overhaul Foundation and Flat Systems Menu patches. Flat welcome system tiles, simplified icon-free settings and Cheats & Sources navigation, flat row dividers. No cheat business logic modified. Compile and device-test before pushing.

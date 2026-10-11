@@ -1,0 +1,1 @@
+Reviewed universal settings overhaul. Hides unavailable folder reset actions; confirms shared Dolphin folder reset; explicit Unit callbacks. Source snapshot must be compared before applying. No build verification performed.

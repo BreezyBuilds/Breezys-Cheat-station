@@ -13,7 +13,7 @@ import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
 
-class SystemHubActivity : AppCompatActivity() {
+class SystemHubActivity : RetroThemedActivity() {
 
     private lateinit var pager: ViewPager2
     private lateinit var tabs: TabLayout
@@ -22,7 +22,7 @@ class SystemHubActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val root = Ui.vbox(this).apply { setBackgroundColor(0xFF0A111E.toInt()) }
+        val root = Ui.vbox(this).apply { setBackgroundColor(Ui.Appearance.background(this@SystemHubActivity)) }
         Ui.edgeToEdge(root)
 
         gameHeader = android.widget.LinearLayout(this).apply {
@@ -50,9 +50,7 @@ class SystemHubActivity : AppCompatActivity() {
                 0
             )
 
-            setOnClickListener {
-                showSearch()
-            }
+            Ui.interact(this@SystemHubActivity, this) { showSearch() }
         }
 
         // Push the search and overflow actions to the right side of the toolbar.
@@ -88,9 +86,7 @@ class SystemHubActivity : AppCompatActivity() {
                 0
             )
 
-            setOnClickListener {
-                showGameMenu(this)
-            }
+            Ui.interact(this@SystemHubActivity, this) { showGameMenu(this) }
         }
 
         (gameHeader as android.widget.LinearLayout).addView(
@@ -101,7 +97,12 @@ class SystemHubActivity : AppCompatActivity() {
             )
         )
 
-        tabs = TabLayout(this)
+        tabs = TabLayout(this).apply {
+            setBackgroundColor(Ui.Appearance.surface(this@SystemHubActivity))
+            setTabTextColors(Ui.Appearance.secondary(this@SystemHubActivity), Ui.Appearance.foreground(this@SystemHubActivity))
+            setSelectedTabIndicatorColor(Ui.Appearance.action(this@SystemHubActivity))
+            tabRippleColor = android.content.res.ColorStateList.valueOf(Ui.Appearance.raised(this@SystemHubActivity))
+        }
 
         pager = ViewPager2(this).apply {
             orientation = ViewPager2.ORIENTATION_HORIZONTAL

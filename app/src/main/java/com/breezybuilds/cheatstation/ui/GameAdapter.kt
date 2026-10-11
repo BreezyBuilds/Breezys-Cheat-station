@@ -67,7 +67,7 @@ class GameAdapter(
         body.addView(texts, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         body.addView(Ui.tv(ctx, "›", 25f, secondary = true), LinearLayout.LayoutParams(Ui.dp(ctx, 18), ViewGroup.LayoutParams.WRAP_CONTENT))
         row.addView(body)
-        row.addView(View(ctx).apply { setBackgroundColor(0xFF293141.toInt()) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(ctx, 1)).apply {
+        row.addView(View(ctx).apply { setBackgroundColor(Ui.Appearance.divider(ctx)) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(ctx, 1)).apply {
             leftMargin = Ui.dp(ctx, 16)
             rightMargin = Ui.dp(ctx, 16)
         })
@@ -85,7 +85,7 @@ class GameAdapter(
             line.visibility = if (text.isBlank()) android.view.View.GONE else android.view.View.VISIBLE
         }
 
-        h.row.setOnClickListener { onClick(g) }
+        Ui.interact(h.row.context, h.row) { onClick(g) }
         h.row.setOnLongClickListener {
             onLong(g)
             true

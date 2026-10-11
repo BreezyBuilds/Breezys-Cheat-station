@@ -322,15 +322,15 @@ private class DolphinGameAdapter(
         private val availability = view.findViewById<TextView>(R.id.dolphin_game_availability)
 
         fun bind(game: Game) {
+            title.setTextColor(Ui.Appearance.foreground(itemView.context))
+            details.setTextColor(Ui.Appearance.secondary(itemView.context))
             title.text = game.title
             val count = countFor(game)
             GameCheatStatus.style(availability, count?.let { "$it cheats available" } ?: statusFor(game))
             details.text = "${game.titleId}  •  ${game.source}"
             details.visibility = if (showTechnicalDetails) View.VISIBLE else View.GONE
 
-            itemView.setOnClickListener {
-                onClick(game)
-            }
+            Ui.interact(itemView.context, itemView) { onClick(game) }
         }
     }
 }
