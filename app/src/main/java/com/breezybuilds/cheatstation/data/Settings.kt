@@ -37,9 +37,14 @@ class Settings(ctx: Context) {
         putString("src_path", c.basePath.trim()); putString("src_pattern", c.fileNamePattern.trim()); putString("src_token", c.token?.trim())
     }
 
-    /** Empty selection is prevented by the UI. Older installs retain their chosen source. */
+    /** Include the user's configured GitHub source alongside the built-in catalogue. */
+    fun allSources(): List<CheatSourceConfig> {
+        val builtIn = com.breezybuilds.cheatstation.provider.RecommendedCheatSources.all.map { it.config }
+        return (builtIn + source()).distinctBy { it.id }
+    }
+
     fun sources(): List<CheatSourceConfig> {
-        val available = com.breezybuilds.cheatstation.provider.RecommendedCheatSources.all.map { it.config }
+        val available = allSources()
         val ids = p.getStringSet("enabled_3ds_sources", null)
         return if (ids == null) listOf(source()) else available.filter { it.id in ids }.ifEmpty { listOf(source()) }
     }
@@ -47,7 +52,16 @@ class Settings(ctx: Context) {
     fun saveSources(sources: List<CheatSourceConfig>) {
         require(sources.isNotEmpty())
         p.edit { putStringSet("enabled_3ds_sources", sources.map { it.id }.toSet()) }
-        saveSource(sources.first())
+    }
+
+    /** Save and enable a custom source without discarding other selected repositories. */
+    fun addCustomSource(config: CheatSourceConfig) {
+        val old = source()
+        val selected = sources().map { it.id }.toMutableSet()
+        saveSource(config)
+        selected.remove(old.id.takeIf { old.id !in com.breezybuilds.cheatstation.provider.RecommendedCheatSources.all.map { it.config.id } } ?: "")
+        selected.add(config.id)
+        p.edit { putStringSet("enabled_3ds_sources", selected) }
     }
 
     fun resetSource() = p.edit { remove("src_owner"); remove("src_repo"); remove("src_branch"); remove("src_path"); remove("src_pattern"); remove("src_token") }

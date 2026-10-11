@@ -682,8 +682,8 @@ class SettingsActivity : AppCompatActivity() {
             else -> app.dolphinSettings.sources().size
         }
         val total = when (cheatSystem) {
-            "3DS" -> RecommendedCheatSources.all.size
-            "PS2" -> Ps2CheatSources.all.size
+            "3DS" -> app.settings.allSources().size
+            "PS2" -> Ps2Settings(this).allSources().size
             else -> app.dolphinSettings.allSources().size
         }
         card("Manage repositories", "$count of $total enabled" + if (shared) " · Shared Dolphin settings" else "") {
@@ -706,12 +706,12 @@ class SettingsActivity : AppCompatActivity() {
         }, true)
         card("Custom repositories", when (cheatSystem) {
             "3DS" -> "Configure a compatible GitHub Title-ID source"
-            "PS2" -> "Only verified built-in PNACH layouts are currently supported"
+            "PS2" -> "Add a GitHub source with SERIAL_CRC.pnach files"
             else -> "Add a compatible Dolphin GitHub source"
         }) {
             when (cheatSystem) {
                 "3DS" -> editSource()
-                "PS2" -> note(Ui.Kind.ERROR, "Custom PS2 repositories require a compatible PNACH provider.")
+                "PS2" -> addPs2Repository()
                 else -> addDolphinRepository()
             }
         }
@@ -731,14 +731,15 @@ class SettingsActivity : AppCompatActivity() {
         val entries: List<Triple<String, String, String>> = when (cheatSystem) {
             "3DS" -> {
                 val enabled = app.settings.sources().map { it.id }.toSet()
-                RecommendedCheatSources.all.map { source ->
-                    Triple(source.name, "${if (source.config.owner == "FlagBrew") "Primary database" else "Sharkive mirror / fork"} · ${source.description}",
-                        "${if (source.config.id in enabled) "Enabled" else "Disabled"} · github.com/${source.config.owner}/${source.config.repo} · ${source.config.basePath}")
+                app.settings.allSources().map { sourceConfig ->
+                    val source = RecommendedCheatSources.all.firstOrNull { it.config.id == sourceConfig.id }
+                    Triple(source?.name ?: "Custom 3DS source", "${if (sourceConfig.owner == "FlagBrew") "Primary database" else if (source == null) "Custom GitHub source" else "Sharkive mirror / fork"} · ${source?.description ?: "Custom Title-ID text files"}",
+                        "${if (sourceConfig.id in enabled) "Enabled" else "Disabled"} · github.com/${sourceConfig.owner}/${sourceConfig.repo} · ${sourceConfig.basePath}")
                 }
             }
             "PS2" -> {
                 val enabled = Ps2Settings(this).sources().map { it.id }.toSet()
-                Ps2CheatSources.all.map { source ->
+                Ps2Settings(this).allSources().map { source ->
                     Triple(source.name, "${if (source.name.contains("Patch", ignoreCase = true) || source.name.contains("Enhancement", ignoreCase = true)) "Patches / enhancements" else "Gameplay cheats"} · ${source.description}",
                         "${if (source.id in enabled) "Enabled" else "Disabled"} · github.com/${source.owner}/${source.repo} · ${source.path}")
                 }
@@ -768,13 +769,13 @@ class SettingsActivity : AppCompatActivity() {
         val enabled: Set<String>
         when (cheatSystem) {
             "3DS" -> {
-                catalogue = RecommendedCheatSources.all.map {
-                    AuditSource(it.config.id, it.name, it.config.owner, it.config.repo, it.config.basePath)
+                catalogue = app.settings.allSources().map {
+                    AuditSource(it.id, it.displayName, it.owner, it.repo, it.basePath)
                 }
                 enabled = app.settings.sources().map { it.id }.toSet()
             }
             "PS2" -> {
-                catalogue = Ps2CheatSources.all.map {
+                catalogue = Ps2Settings(this).allSources().map {
                     AuditSource(it.id, it.name, it.owner, it.repo, it.path)
                 }
                 enabled = Ps2Settings(this).sources().map { it.id }.toSet()
@@ -862,14 +863,14 @@ class SettingsActivity : AppCompatActivity() {
         val recommended: Set<String>
         when (cheatSystem) {
             "3DS" -> {
-                val all = RecommendedCheatSources.all
-                labels = all.map { "${it.name}\n${it.description}" }
-                ids = all.map { it.config.id }
+                val all = app.settings.allSources()
+                labels = all.map { "${it.displayName}\n${it.basePath}/{TITLEID}.txt" }
+                ids = all.map { it.id }
                 selected = app.settings.sources().map { it.id }.toMutableSet()
-                recommended = setOf(all.first().config.id)
+                recommended = setOf(RecommendedCheatSources.all.first().config.id)
             }
             "PS2" -> {
-                val all = Ps2CheatSources.all
+                val all = Ps2Settings(this).allSources()
                 labels = all.map { "${it.name}\n${it.description}" }
                 ids = all.map { it.id }
                 selected = Ps2Settings(this).sources().map { it.id }.toMutableSet()
@@ -886,8 +887,8 @@ class SettingsActivity : AppCompatActivity() {
         fun save(chosen: Set<String>) {
             if (chosen.isEmpty()) { note(Ui.Kind.ERROR, "Select at least one repository."); return }
             when (cheatSystem) {
-                "3DS" -> app.settings.saveSources(RecommendedCheatSources.all.filter { it.config.id in chosen }.map { it.config })
-                "PS2" -> Ps2Settings(this).saveSources(Ps2CheatSources.all.filter { it.id in chosen })
+                "3DS" -> app.settings.saveSources(app.settings.allSources().filter { it.id in chosen })
+                "PS2" -> Ps2Settings(this).saveSources(Ps2Settings(this).allSources().filter { it.id in chosen })
                 else -> app.dolphinSettings.saveSources(app.dolphinSettings.allSources().filter { it.id in chosen })
             }
             render()
@@ -1094,8 +1095,42 @@ class SettingsActivity : AppCompatActivity() {
                 path.text.toString().trim(), pattern.text.toString().trim(), token.text.toString().trim().ifBlank { null })
             val err = c.validate()
             if (err != null) { pattern.error = err; return@setOnClickListener }
-            app.settings.saveSource(c)
-            dlg.dismiss(); render(); note(Ui.Kind.OK, "Cheat source saved. Use \"Refresh cheat database now\" to download from it.")
+            app.settings.addCustomSource(c)
+            dlg.dismiss(); render(); note(Ui.Kind.OK, "Custom 3DS source saved and enabled.")
+        }
+    }
+
+    /** Custom PS2 repositories must use direct SERIAL_CRC.pnach files in the configured folder. */
+    private fun addPs2Repository() {
+        val box = Ui.vbox(this, 20)
+        fun field(hint: String, value: String = "") = EditText(this).apply {
+            this.hint = hint; setText(value); setSingleLine()
+        }.also { box.addView(it, Ui.lp()) }
+        val name = field("Display name")
+        val owner = field("GitHub owner")
+        val repo = field("GitHub repository")
+        val branch = field("Branch", "main")
+        val path = field("PNACH folder", "cheats")
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setTitle("Add PS2 PNACH repository")
+            .setMessage("Files must be named SERIAL_CRC.pnach directly inside the specified folder. Other layouts are not supported by this provider.")
+            .setView(ScrollView(this).apply { addView(box) })
+            .setPositiveButton("Add", null).setNegativeButton("Cancel", null).show()
+        dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setOnClickListener {
+            val source = com.breezybuilds.cheatstation.provider.Ps2CheatSource(
+                name.text.toString().trim(), "Custom SERIAL_CRC PNACH repository",
+                owner.text.toString().trim(), repo.text.toString().trim(),
+                branch.text.toString().trim(), path.text.toString().trim().trim('/'))
+            val validPart = Regex("^[A-Za-z0-9_.-]+$")
+            if (source.name.isBlank() || !validPart.matches(source.owner) ||
+                !validPart.matches(source.repo) ||
+                !Regex("^[A-Za-z0-9_./-]+$").matches(source.branch) || source.branch.contains("..") ||
+                source.path.contains("..") || !Regex("^[A-Za-z0-9_./ -]*$").matches(source.path)) {
+                note(Ui.Kind.ERROR, "Enter a valid name, GitHub repository, branch and folder.")
+                return@setOnClickListener
+            }
+            Ps2Settings(this).addCustomSource(source)
+            dialog.dismiss(); render(); note(Ui.Kind.OK, "Custom PS2 repository saved and enabled.")
         }
     }
 
