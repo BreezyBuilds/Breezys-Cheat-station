@@ -252,6 +252,7 @@ class CheatsActivity : AppCompatActivity() {
             setBusy(false)
             when (res) {
                 is CheatResult.Loaded -> {
+                    if (isPs2) GameCheatStatus.put(this@CheatsActivity, "ps2", game.titleId, res.file.cheats.size)
                     loaded = res
                     compat = Compatibility.check(game.version, res.file.version)
                     when {

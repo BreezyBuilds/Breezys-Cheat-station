@@ -15,6 +15,7 @@ import com.breezybuilds.cheatstation.emulator.LibraryRefresh
 import com.breezybuilds.cheatstation.emulator.UniversalRoms
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.progressindicator.LinearProgressIndicator
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -32,6 +33,7 @@ class Ps2PageFragment : Fragment() {
     private var busy = false
     private val cheatCounts = mutableMapOf<String, Int>()
     private var forceRefreshCounts = false
+    private var countJob: Job? = null
 
     private val app get() = requireContext().app
 
@@ -134,8 +136,10 @@ class Ps2PageFragment : Fragment() {
 
         if (::adapter.isInitialized) {
             adapter.setShowTechnicalDetails(app.settings.showTechnicalGameDetails)
+            // The details activity writes the authoritative merged count when it finishes.
             cheatCounts.clear()
             updateCheatCounts(games)
+            updateAdapter()
         }
 
         if (::setupStatus.isInitialized) {
@@ -189,7 +193,8 @@ class Ps2PageFragment : Fragment() {
     }
 
     private fun updateCheatCounts(items: List<Game>, useSavedCounts: Boolean = true) {
-        viewLifecycleOwner.lifecycleScope.launch {
+        countJob?.cancel()
+        countJob = viewLifecycleOwner.lifecycleScope.launch {
             for (game in items) {
                 val id = game.titleId
                 if (cheatCounts.containsKey(id)) continue
@@ -255,7 +260,15 @@ class Ps2PageFragment : Fragment() {
         UniversalRoms.scanMode(requireContext()).name
     ).joinToString("|")
 
-    fun rescanGames() { forceRefreshCounts = true; scan() }
+    fun rescanGames() {
+        forceRefreshCounts = true
+        countJob?.cancel()
+        cheatCounts.clear()
+        // Remove stale labels immediately, including the persistent 7-day summaries.
+        games.forEach { GameCheatStatus.remove(requireContext(), "ps2", it.titleId) }
+        updateAdapter()
+        scan()
+    }
 
     fun setSearchQuery(query: String) {
         searchQuery = query

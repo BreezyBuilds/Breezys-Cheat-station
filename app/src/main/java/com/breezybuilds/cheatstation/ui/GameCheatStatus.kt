@@ -14,6 +14,10 @@ internal object GameCheatStatus {
         if (!p.contains(key) || System.currentTimeMillis() - p.getLong("$key:time", 0) > TTL) return null
         return p.getInt(key, -2).takeIf { it >= 0 }
     }
+    fun remove(ctx: Context, platform: String, id: String) {
+        val key = "$platform:$id"
+        prefs(ctx).edit().remove(key).remove("$key:time").apply()
+    }
     fun put(ctx: Context, platform: String, id: String, count: Int) {
         val key = "$platform:$id"
         prefs(ctx).edit().putInt(key, count).putLong("$key:time", System.currentTimeMillis()).apply()
