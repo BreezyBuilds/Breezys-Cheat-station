@@ -45,9 +45,9 @@ object Ui {
             text = label
             isAllCaps = false
             textSize = 13f
-            setTextColor(0xFFE7EDF8.toInt())
-            backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF1A273B.toInt())
-            strokeColor = android.content.res.ColorStateList.valueOf(0xFF34435A.toInt())
+            setTextColor(if (filled) 0xFF2459A6.toInt() else 0xFFE7EDF8.toInt())
+            backgroundTintList = android.content.res.ColorStateList.valueOf(if (filled) 0xFFFFFFFF.toInt() else 0xFF1A273B.toInt())
+            strokeColor = android.content.res.ColorStateList.valueOf(if (filled) 0xFFB8CBE8.toInt() else 0xFF34435A.toInt())
             strokeWidth = dp(ctx, 1)
             cornerRadius = dp(ctx, 12)
             minHeight = dp(ctx, 44)
@@ -73,7 +73,7 @@ object Ui {
     private const val OUTLINE = 0xFF2A364A.toInt()
     private const val MUTED = 0xFFABB8CD.toInt()
 
-    private fun systemAccent(name: String): Int = when (name.uppercase()) {
+    fun systemAccent(name: String): Int = when (name.uppercase()) {
         "3DS" -> 0xFFE34050.toInt()
         "PS2" -> 0xFF247EE8.toInt()
         "WII" -> 0xFF13A5D6.toInt()
@@ -86,14 +86,14 @@ object Ui {
         "ps2" -> "PS"
         "wii" -> "Wii"
         "gamecube" -> "GC"
-        "systems" -> "▦"
-        "cheats & sources" -> "✦"
-        "backups" -> "↺"
+        "systems" -> "▤"
+        "cheats & sources" -> "⌘"
+        "backups" -> "↶"
         "advanced", "additional options" -> "⚙"
         "about" -> "ⓘ"
-        "emulator" -> "▣"
-        "emulator data folder", "emulator data path", "games folder", "cheats folder", "transfer folder", "cheat storage" -> "▤"
-        else -> "›"
+        "compatible emulators", "emulator" -> "▣"
+        "emulator data folder", "emulator data path", "games folder", "cheats folder", "transfer folder", "cheat storage" -> "▱"
+        else -> "•"
     }
 
     private fun gradient(ctx: Context, a: Int, b: Int, radius: Int = 16): GradientDrawable =
@@ -101,15 +101,32 @@ object Ui {
             cornerRadius = dp(ctx, radius).toFloat()
         }
 
-    private fun icon(ctx: Context, title: String): TextView = TextView(ctx).apply {
+    /** Original in-app vector console silhouettes; no third-party logos or artwork. */
+    private fun icon(ctx: Context, title: String): View {
+        val drawable = when (title.uppercase()) {
+            "3DS", "NINTENDO 3DS" -> com.breezybuilds.cheatstation.R.drawable.ic_breezy_3ds
+            "PS2", "PLAYSTATION 2" -> com.breezybuilds.cheatstation.R.drawable.ic_breezy_ps2
+            "WII", "NINTENDO WII" -> com.breezybuilds.cheatstation.R.drawable.ic_breezy_wii
+            "GAMECUBE", "NINTENDO GAMECUBE" -> com.breezybuilds.cheatstation.R.drawable.ic_breezy_gamecube
+            else -> 0
+        }
         val accent = systemAccent(title)
-        text = glyph(title)
-        gravity = android.view.Gravity.CENTER
-        textSize = if (title.length > 4 && title.lowercase() !in listOf("gamecube", "systems")) 20f else 14f
-        setTypeface(typeface, Typeface.BOLD)
-        setTextColor(Color.WHITE)
-        background = gradient(ctx, accent, 0xFF17253C.toInt(), 12)
-        contentDescription = "$title icon"
+        val background = gradient(ctx, accent, 0xFF17253C.toInt(), 12)
+        return if (drawable != 0) ImageView(ctx).apply {
+            setImageResource(drawable)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            setPadding(dp(ctx, 7), dp(ctx, 7), dp(ctx, 7), dp(ctx, 7))
+            this.background = background
+            contentDescription = "$title console icon"
+        } else TextView(ctx).apply {
+            text = glyph(title)
+            gravity = android.view.Gravity.CENTER
+            textSize = 20f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(Color.WHITE)
+            this.background = background
+            contentDescription = "$title icon"
+        }
     }
 
     /** Clean grouped setting row; no technical detail is lost from the subtitle. */
@@ -117,16 +134,15 @@ object Ui {
         MaterialCardView(ctx).apply {
             isClickable = true
             isFocusable = true
-            radius = dp(ctx, 14).toFloat()
-            strokeWidth = dp(ctx, 1)
-            strokeColor = OUTLINE
-            setCardBackgroundColor(SURFACE)
+            radius = 0f
+            strokeWidth = 0
+            setCardBackgroundColor(0xFF0A111E.toInt())
             setOnClickListener { onClick() }
 
             val row = LinearLayout(ctx).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = android.view.Gravity.CENTER_VERTICAL
-                setPadding(dp(ctx, 12), dp(ctx, 10), dp(ctx, 12), dp(ctx, 10))
+                setPadding(dp(ctx, 6), dp(ctx, 11), dp(ctx, 6), dp(ctx, 11))
             }
             row.addView(icon(ctx, title), lp(dp(ctx, 40), dp(ctx, 40)).apply {
                 rightMargin = dp(ctx, 12)
@@ -150,20 +166,21 @@ object Ui {
     /** Console-coloured illustrated header, reused on the overview and each settings page. */
     fun statusPanel(ctx: Context, system: String, status: StorageStatus, emulator: String? = null): MaterialCardView =
         MaterialCardView(ctx).apply {
-            radius = dp(ctx, 18).toFloat()
+            // System destinations are flat menu rows, not rounded action cards.
+            radius = 0f
             strokeWidth = 0
             val accent = systemAccent(system)
             setCardBackgroundColor(accent)
             val outer = LinearLayout(ctx).apply {
                 orientation = LinearLayout.VERTICAL
-                background = gradient(ctx, accent, 0xFF131D34.toInt(), 18)
-                setPadding(dp(ctx, 15), dp(ctx, 16), dp(ctx, 15), dp(ctx, 15))
+                background = gradient(ctx, accent, 0xFF131D34.toInt(), 0)
+                setPadding(dp(ctx, 15), dp(ctx, 12), dp(ctx, 15), dp(ctx, 12))
             }
             val header = LinearLayout(ctx).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = android.view.Gravity.CENTER_VERTICAL
             }
-            header.addView(icon(ctx, system), lp(dp(ctx, 54), dp(ctx, 54)).apply {
+            header.addView(icon(ctx, system), lp(dp(ctx, 48), dp(ctx, 48)).apply {
                 rightMargin = dp(ctx, 12)
             })
             val identity = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
@@ -188,11 +205,8 @@ object Ui {
             }
             header.addView(statusLabel, lp(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
             outer.addView(header, lp())
-            outer.addView(tv(ctx, status.detail, 12f).apply {
-                setTextColor(0xFFE3EAF5.toInt())
-                maxLines = 2
-                setPadding(0, dp(ctx, 12), 0, 0)
-            }, lp())
+            // Status details belong on the system-specific configuration page;
+            // the overview already displays readiness beside the system name.
             addView(outer, android.widget.FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         }

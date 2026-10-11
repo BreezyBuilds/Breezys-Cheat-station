@@ -449,7 +449,7 @@ class SettingsActivity : AppCompatActivity() {
         content.addView(
             ps2Card,
             Ui.lp().apply {
-                topMargin = Ui.dp(this@SettingsActivity, 6)
+                topMargin = Ui.dp(this@SettingsActivity, 2)
             }
         )
 
@@ -465,11 +465,8 @@ class SettingsActivity : AppCompatActivity() {
         listOf("Wii" to Page.WII, "GameCube" to Page.GAMECUBE).forEach { (name, destination) ->
             val card = Ui.statusPanel(this, name, dolphinState.toStatus(), dolphin?.name)
             card.setOnClickListener { navigate(destination) }
-            content.addView(card, Ui.lp().apply { topMargin = Ui.dp(this@SettingsActivity, 6) })
-            if (dolphinState == com.breezybuilds.cheatstation.storage.StorageState.ACCESSIBLE &&
-                UniversalRoms.uri(this) != null) {
-                line("$name library · Games can be scanned from your universal ROM folder", true)
-            }
+            content.addView(card, Ui.lp().apply { topMargin = Ui.dp(this@SettingsActivity, 2) })
+
         }
     }
 

@@ -106,8 +106,12 @@ class CheatsActivity : AppCompatActivity() {
             }
             true
         }
+        toolbar.setBackgroundColor(0xFF111B2B.toInt())
+        toolbar.setSubtitleTextColor(Ui.systemAccent(if (isPs2) "PS2" else "3DS"))
+        toolbar.subtitle = if (isPs2) "PLAYSTATION 2" else "NINTENDO 3DS"
         root.addView(toolbar, Ui.lp())
         progress = LinearProgressIndicator(ctx).apply { isIndeterminate = true; visibility = View.GONE }
+        progress.setIndicatorColor(Ui.systemAccent(if (isPs2) "PS2" else "3DS"))
         root.addView(progress, Ui.lp())
 
         header = Ui.tv(ctx, "", 18f, bold = true).apply {

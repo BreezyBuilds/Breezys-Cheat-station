@@ -49,12 +49,16 @@ class DolphinCheatsActivity : AppCompatActivity() {
         gameTitle = intent.getStringExtra("title") ?: "Game"
         titleId = intent.getStringExtra("titleId") ?: ""
         val platform = intent.getStringExtra("platform") ?: ""
+        val platformAccent = Ui.systemAccent(if (platform.contains("wii", true)) "Wii" else "GameCube")
 
         val root = Ui.vbox(this)
         Ui.edgeToEdge(root)
 
         val toolbar = MaterialToolbar(this).apply {
             title = "Cheats"
+            setBackgroundColor(0xFF111B2B.toInt())
+            subtitle = if (platform.contains("wii", true)) "NINTENDO WII" else "NINTENDO GAMECUBE"
+            setSubtitleTextColor(platformAccent)
 
             menu.add(Menu.NONE, 1, 1, "Refresh cheats")
             menu.add(Menu.NONE, 2, 2, "Select all")
