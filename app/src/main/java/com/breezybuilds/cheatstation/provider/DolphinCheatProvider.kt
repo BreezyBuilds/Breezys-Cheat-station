@@ -67,14 +67,8 @@ class DolphinCheatProvider(
             if (parsed.cheats.isNotEmpty()) {
                 return parsed
             }
-        } else if (
-            exactResponse.code != 404 &&
-            exactResponse.code != 403
-        ) {
-            throw ProviderException(
-                ProviderError.HTTP,
-                "${source.name} returned HTTP ${exactResponse.code}."
-            )
+        } else if (exactResponse.code != 404) {
+            throw httpFailure(source.name, exactResponse)
         }
 
         val file = findFile(source, gameId)
@@ -86,16 +80,21 @@ class DolphinCheatProvider(
         )
 
         if (response.code !in 200..299) {
-            throw ProviderException(
-                ProviderError.HTTP,
-                "${source.name} returned HTTP ${response.code}."
-            )
+            throw httpFailure(source.name, response)
         }
 
         return DolphinCheatParser.parse(
             response.body,
             gameId
         )
+    }
+
+    private fun httpFailure(name: String, response: HttpResponse): ProviderException {
+        val limited = response.code == 429 ||
+            (response.code == 403 && response.headers["x-ratelimit-remaining"] == "0")
+        return if (limited) ProviderException(ProviderError.RATE_LIMITED,
+            "$name is temporarily rate limited by GitHub.")
+        else ProviderException(ProviderError.HTTP, "$name returned HTTP ${response.code}.")
     }
 
     private fun findFile(
@@ -120,23 +119,19 @@ class DolphinCheatProvider(
 
         if (response.code == 404) return null
 
-        if (response.code == 429) {
-            throw ProviderException(
-                ProviderError.RATE_LIMITED,
-                "${source.name} is temporarily rate limited."
-            )
-        }
-
         if (response.code !in 200..299) {
-            throw ProviderException(
-                ProviderError.HTTP,
-                "${source.name} returned HTTP ${response.code}."
-            )
+            throw httpFailure(source.name, response)
         }
 
-        val tree = JSONObject(response.body)
-            .optJSONArray("tree")
-            ?: return null
+        val index = try { JSONObject(response.body) } catch (e: Exception) {
+            throw ProviderException(ProviderError.INVALID, "${source.name} returned an invalid repository index.")
+        }
+        if (index.optBoolean("truncated")) {
+            throw ProviderException(ProviderError.INVALID,
+                "${source.name} returned an incomplete repository index. Cheat availability cannot be confirmed.")
+        }
+        val tree = index.optJSONArray("tree")
+            ?: throw ProviderException(ProviderError.INVALID, "${source.name} returned an invalid repository index.")
 
         val wantedFull = "$gameId.ini"
         val wantedShort = "${gameId.take(3)}.ini"

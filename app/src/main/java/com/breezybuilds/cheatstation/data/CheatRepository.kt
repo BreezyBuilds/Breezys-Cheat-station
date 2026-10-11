@@ -16,6 +16,16 @@ sealed class CheatResult {
 
 /** Reads every enabled 3DS source, with independent cache/index entries per repository. */
 class CheatRepository(private val cache: CacheStore, private val providers: () -> List<CheatProvider>) {
+    private fun sourceNotice(total: Int, live: Int, failed: Int, cachedFallback: Boolean): String {
+        val message = "Combined $total compatible source(s); duplicate codes removed"
+        return when {
+            live == 0 -> "$message. Offline cached data only; refresh did not succeed."
+            cachedFallback -> "$message. Some repositories failed; cached results were used."
+            failed > 0 -> "$message. $failed repository request(s) failed."
+            else -> message
+        }
+    }
+
     fun formatTime(t: Long): String = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(t))
 
     fun cached(titleId: String): CheatResult.Loaded? {
@@ -32,28 +42,38 @@ class CheatRepository(private val cache: CacheStore, private val providers: () -
 
     suspend fun load(titleId: String): CheatResult {
         var lastError: ProviderException? = null
+        var liveSources = 0
+        var failedSources = 0
+        var usedCachedFallback = false
         val results = mutableListOf<Triple<String, com.breezybuilds.cheatstation.model.CheatFile, Long>>()
         for (provider in providers()) {
             try {
                 val fetched = provider.fetch(titleId)
                 val parsed = CheatParser.parse(fetched.text, titleId)
                 if (parsed.cheats.isEmpty()) continue
+                liveSources++
                 cache.saveCheats(provider.id, titleId, fetched.text, fetched.fetchedAt)
                 results.add(Triple(provider.displayName, parsed, fetched.fetchedAt))
             } catch (e: ProviderException) {
                 lastError = e
+                failedSources++
                 AppLog.w("Repo", "${provider.displayName}: ${e.kind}")
                 cache.loadCheats(provider.id, titleId)?.let { saved ->
                     val parsed = CheatParser.parse(saved.text, titleId)
-                    if (parsed.cheats.isNotEmpty()) results.add(Triple(provider.displayName, parsed, saved.fetchedAt))
+                    if (parsed.cheats.isNotEmpty()) {
+                        usedCachedFallback = true
+                        results.add(Triple(provider.displayName, parsed, saved.fetchedAt))
+                    }
                 }
             } catch (e: Exception) {
+                failedSources++
                 AppLog.e("Repo", "Unexpected error from ${provider.displayName}", e)
             }
         }
         if (results.isNotEmpty()) {
             return CheatResult.Loaded(MultiSourceCheatMerger.merge(titleId, results.map { it.first to it.second }),
-                results.maxOf { it.third }, false, "Combined ${results.size} compatible source(s); duplicate codes removed")
+                results.maxOf { it.third }, liveSources == 0,
+                sourceNotice(results.size, liveSources, failedSources, usedCachedFallback))
         }
         return cached(titleId) ?: CheatResult.Unavailable(lastError?.message ?: "No cheats found in the selected repositories.", lastError?.kind)
     }
