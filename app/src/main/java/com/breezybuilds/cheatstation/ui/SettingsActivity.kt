@@ -1209,6 +1209,7 @@ class SettingsActivity : AppCompatActivity() {
         note(Ui.Kind.INFO, "Refreshing $system cheats for ${games.size} games…")
         lifecycleScope.launch {
             var found = 0
+            var cached = 0
             var missing = 0
             var failed = 0
             withContext(Dispatchers.IO) {
@@ -1219,7 +1220,7 @@ class SettingsActivity : AppCompatActivity() {
                         if (system == "PS2") {
                             when (val result = app.ps2Repository.load(game.titleId)) {
                                 is com.breezybuilds.cheatstation.data.CheatResult.Loaded -> {
-                                    if (result.fromCache) failed++ else found++
+                                    if (result.fromCache) cached++ else found++
                                 }
                                 is com.breezybuilds.cheatstation.data.CheatResult.Unavailable -> {
                                     if (result.kind == com.breezybuilds.cheatstation.provider.ProviderError.NOT_FOUND ||
@@ -1249,11 +1250,15 @@ class SettingsActivity : AppCompatActivity() {
                 }
             }
             note(if (failed == 0) Ui.Kind.OK else Ui.Kind.WARN,
-                "$system refresh complete: $found with cheats, $missing not found, $failed failed. Checked ${games.size} games.")
+                "$system refresh complete: $found fresh results, $cached cached results, $missing not found, $failed failed. Checked ${games.size} games.")
         }
     }
 
     private fun refreshNow() {
+        if (app.settings.sources().isEmpty()) {
+            note(Ui.Kind.WARN, "Enable at least one 3DS repository before refreshing.")
+            return
+        }
         val games = (app.cache.loadGames() + app.cache.loadManual()).distinctBy { it.titleId }
         if (games.isEmpty()) { note(Ui.Kind.WARN, "No games known yet. Scan for games on the main screen first."); return }
         note(Ui.Kind.INFO, "Updating…")
