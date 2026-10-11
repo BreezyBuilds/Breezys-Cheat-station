@@ -640,20 +640,30 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun renderCheatSettings() {
-        line("Choose a system to manage its cheat repositories. Individual game cheats stay in the game library.", true)
-        listOf("3DS" to "Nintendo 3DS", "PS2" to "PlayStation 2",
-            "Wii" to "Wii", "GameCube" to "GameCube").forEach { (id, label) ->
-            val summary = when (id) {
-                "3DS" -> "${app.settings.sources().size} repositories enabled"
-                "PS2" -> "${Ps2Settings(this).sources().size} repositories enabled"
-                else -> "${app.dolphinSettings.sources().size} Dolphin repositories enabled · Shared settings"
+        line("Manage cheat discovery across all four systems. Installed cheats are never modified by source settings.", true)
+        subsection("SYSTEM SOURCES")
+        listOf("3DS", "PS2", "Wii", "GameCube").forEach { id ->
+            val enabled = when (id) {
+                "3DS" -> app.settings.sources().size
+                "PS2" -> Ps2Settings(this).sources().size
+                else -> app.dolphinSettings.sources().size
             }
-            card(cheatSystemLabel(id), summary) { cheatSystem = id; navigate(Page.CHEAT_SYSTEM) }
+            val total = when (id) {
+                "3DS" -> app.settings.allSources().size
+                "PS2" -> Ps2Settings(this).allSources().size
+                else -> app.dolphinSettings.allSources().size
+            }
+            val state = if (enabled == 0) "Needs setup" else "$enabled of $total sources enabled"
+            val shared = if (id == "Wii" || id == "GameCube") " · Shared Dolphin configuration" else ""
+            card(cheatSystemLabel(id), state + shared) {
+                cheatSystem = id
+                navigate(Page.CHEAT_SYSTEM)
+            }
         }
         subsection("DATABASE & UPDATES")
         line("Cached cheat data: ${app.cache.cheatDataSize() / 1024} KB", true)
-        btn("Refresh 3DS cheat database") { refreshNow() }
-        btn("Clear cached cheat data") {
+        card("Refresh 3DS database", "Update the cheat index using selected sources") { refreshNow() }
+        card("Clear downloaded cheat cache", "Remove cached searches without touching installed emulator cheats") {
             MaterialAlertDialogBuilder(this).setTitle("Clear cached cheat data?")
                 .setMessage("Downloaded cheat lists are removed from this app. Installed cheats are not touched.")
                 .setPositiveButton("Clear") { _, _ ->
@@ -664,19 +674,10 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 
-    /** One consistent set of actions for every console. Source formats stay system-specific. */
+    /** One source-management flow, shared between Wii and GameCube where appropriate. */
     private fun renderSystemCheatSettings() {
         val shared = cheatSystem == "Wii" || cheatSystem == "GameCube"
-        val name = when (cheatSystem) {
-            "3DS" -> "Nintendo 3DS"
-            "PS2" -> "PlayStation 2"
-            "Wii" -> "Nintendo Wii"
-            else -> "Nintendo GameCube"
-        }
-        line("${cheatSystemLabel(cheatSystem)} · Cheat sources", true)
-        line("Choose how compatible repositories are searched. Game-specific cheats stay in your game library.", true)
-        subsection("REPOSITORIES")
-        val count = when (cheatSystem) {
+        val enabled = when (cheatSystem) {
             "3DS" -> app.settings.sources().size
             "PS2" -> Ps2Settings(this).sources().size
             else -> app.dolphinSettings.sources().size
@@ -686,28 +687,21 @@ class SettingsActivity : AppCompatActivity() {
             "PS2" -> Ps2Settings(this).allSources().size
             else -> app.dolphinSettings.allSources().size
         }
-        card("Manage repositories", "$count of $total enabled" + if (shared) " · Shared Dolphin settings" else "") {
-            chooseUniversalRepositories()
-        }
-        subsection("SOURCE INFORMATION")
-        card("View repository catalogue", "See enabled sources, repository addresses and supported formats") {
-            showCheatRepositoryCatalogue()
-        }
-        card("Check repository configuration", "Audit selected sources, duplicate IDs and repository addresses") {
-            showRepositoryConfigurationAudit()
-        }
-        card("Check repository availability", "Live GitHub connection test for each enabled source") {
-            checkRepositoryAvailability()
-        }
-        line(when (cheatSystem) {
-            "3DS" -> "3DS sources require Title-ID text files compatible with the 3DS cheat parser."
-            "PS2" -> "PS2 sources require PNACH files. Enhancement patches may not be gameplay cheats."
-            else -> "Wii and GameCube share Dolphin-compatible INI sources, but search for their own games."
-        }, true)
-        card("Custom repositories", when (cheatSystem) {
-            "3DS" -> "Configure a compatible GitHub Title-ID source"
-            "PS2" -> "Add a GitHub source with SERIAL_CRC.pnach files"
-            else -> "Add a compatible Dolphin GitHub source"
+        line(cheatSystemLabel(cheatSystem), true)
+        line(if (shared) "Wii and GameCube share Dolphin repositories. Changes here apply to both systems."
+             else "Select repositories to search for game-specific cheats.", true)
+        subsection("SOURCE STATUS")
+        line(if (enabled == 0) "No repositories enabled — select at least one to discover cheats."
+             else "$enabled of $total repositories enabled. Availability and cheat coverage are separate checks.", true)
+        card("Choose repositories", "Use all, recommended or a custom selection") { chooseUniversalRepositories() }
+        card("Browse source catalogue", "View each repository, its file format and enabled state") { showCheatRepositoryCatalogue() }
+        subsection("SOURCE TOOLS")
+        card("Check live availability", "Test enabled GitHub repositories") { checkRepositoryAvailability() }
+        card("Check configuration", "Audit repository addresses and selections") { showRepositoryConfigurationAudit() }
+        card("Add custom repository", when (cheatSystem) {
+            "3DS" -> "Title-ID text files compatible with the 3DS parser"
+            "PS2" -> "SERIAL_CRC.pnach files compatible with the PS2 parser"
+            else -> "Dolphin GameSettings INI files"
         }) {
             when (cheatSystem) {
                 "3DS" -> editSource()
@@ -715,15 +709,17 @@ class SettingsActivity : AppCompatActivity() {
                 else -> addDolphinRepository()
             }
         }
-        subsection("DATABASE & UPDATES")
-        line("Cached cheat data: ${app.cache.cheatDataSize() / 1024} KB", true)
-        card(if (cheatSystem == "3DS") "Refresh repository data" else "Repository update behaviour", if (cheatSystem == "3DS") "Refresh the 3DS Title-ID database" else "Cheats are checked when you open a game") {
-            if (cheatSystem == "3DS") refreshNow()
-            else note(Ui.Kind.OK, "${cheatSystem} repositories are queried when checking games.")
+        subsection("CHEAT DATABASE")
+        if (cheatSystem == "3DS") {
+            card("Refresh 3DS database", "Update the cheat index using selected sources") { refreshNow() }
+        } else {
+            line("Game-specific cheats are checked when you open a game.", true)
         }
-        line("Recommended mode favours original or complementary sources; mirrors are not counted as new cheat databases.", true)
-        if (cheatSystem == "PS2") line("Some PS2 repositories contain widescreen, FPS or compatibility patches. Review each code before enabling it.", true)
-        line("Selected sources are stored on this device. Installed cheat files are not changed by repository settings.", true)
+        line("Cached cheat data: ${app.cache.cheatDataSize() / 1024} KB", true)
+        if (cheatSystem == "PS2") {
+            line("Some sources contain widescreen, FPS and compatibility patches rather than gameplay cheats.", true)
+        }
+        line("A reachable GitHub repository does not guarantee compatible cheats for every game. Source settings never change installed cheat files.", true)
     }
 
     /**
