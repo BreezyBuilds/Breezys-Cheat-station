@@ -144,9 +144,7 @@ object Ui {
                 gravity = android.view.Gravity.CENTER_VERTICAL
                 setPadding(dp(ctx, 6), dp(ctx, 11), dp(ctx, 6), dp(ctx, 11))
             }
-            row.addView(icon(ctx, title), lp(dp(ctx, 40), dp(ctx, 40)).apply {
-                rightMargin = dp(ctx, 12)
-            })
+            // Navigation is identified by its text, not a decorative icon tile.
             val texts = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
             texts.addView(tv(ctx, title, 14f, bold = true).apply { setTextColor(Color.WHITE) }, lp())
             if (subtitle.isNotBlank()) texts.addView(tv(ctx, subtitle, 12f).apply {
@@ -161,6 +159,9 @@ object Ui {
                 setTextColor(MUTED)
             }, lp(dp(ctx, 22), ViewGroup.LayoutParams.WRAP_CONTENT))
             addView(row, lp())
+            // Flat settings rows use a restrained separator, like the game library.
+            addView(View(ctx).apply { setBackgroundColor(0xFF253044.toInt()) },
+                lp(ViewGroup.LayoutParams.MATCH_PARENT, dp(ctx, 1)))
         }
 
     /** Console-coloured illustrated header, reused on the overview and each settings page. */

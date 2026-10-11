@@ -351,7 +351,7 @@ class SettingsActivity : AppCompatActivity() {
     private fun card(title: String, subtitle: String, onClick: () -> Unit) {
         content.addView(
             Ui.settingsCard(this, title, subtitle, onClick),
-            Ui.lp().apply { topMargin = Ui.dp(this@SettingsActivity, 5) }
+            Ui.lp().apply { topMargin = Ui.dp(this@SettingsActivity, 1) }
         )
     }
 

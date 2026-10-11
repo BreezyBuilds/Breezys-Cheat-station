@@ -72,14 +72,14 @@ class WelcomeActivity : AppCompatActivity() {
 
             val params = GridLayout.LayoutParams().apply {
                 width = 0
-                height = Ui.dp(this@WelcomeActivity, 110)
+                height = Ui.dp(this@WelcomeActivity, 94)
                 columnSpec = GridLayout.spec(index % 2, 1f)
                 rowSpec = GridLayout.spec(index / 2)
                 setMargins(
-                    Ui.dp(this@WelcomeActivity, 4),
-                    Ui.dp(this@WelcomeActivity, 4),
-                    Ui.dp(this@WelcomeActivity, 4),
-                    Ui.dp(this@WelcomeActivity, 4)
+                    Ui.dp(this@WelcomeActivity, 2),
+                    Ui.dp(this@WelcomeActivity, 2),
+                    Ui.dp(this@WelcomeActivity, 2),
+                    Ui.dp(this@WelcomeActivity, 2)
                 )
             }
 
@@ -122,8 +122,16 @@ class WelcomeActivity : AppCompatActivity() {
         onClick: () -> Unit
     ): MaterialCardView {
         val card = MaterialCardView(this).apply {
-            radius = Ui.dp(this@WelcomeActivity, 16).toFloat()
-            setCardElevation(Ui.dp(this@WelcomeActivity, 2).toFloat())
+            radius = 0f
+            strokeWidth = 0
+            cardElevation = 0f
+            val systemKey = when {
+                title.contains("3DS") -> "3DS"
+                title.contains("PlayStation") -> "PS2"
+                title.contains("Wii") -> "WII"
+                else -> "GAMECUBE"
+            }
+            setCardBackgroundColor(Ui.systemAccent(systemKey))
             isClickable = enabled
             isFocusable = enabled
             alpha = if (enabled) 1f else 0.55f
@@ -135,15 +143,29 @@ class WelcomeActivity : AppCompatActivity() {
 
         val box = Ui.vbox(this, 16).apply {
             gravity = Gravity.CENTER_VERTICAL
+            val key = when {
+                title.contains("3DS") -> "3DS"
+                title.contains("PlayStation") -> "PS2"
+                title.contains("Wii") -> "WII"
+                else -> "GAMECUBE"
+            }
+            background = android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT,
+                intArrayOf(Ui.systemAccent(key), 0xFF152139.toInt())
+            ).apply { cornerRadius = 0f }
         }
 
         box.addView(
-            Ui.tv(this, title, 19f, bold = true),
+            Ui.tv(this, title, 19f, bold = true).apply {
+                setTextColor(android.graphics.Color.WHITE)
+            },
             Ui.lp()
         )
 
         box.addView(
-            Ui.tv(this, description, 12f, secondary = true),
+            Ui.tv(this, description, 12f).apply {
+                setTextColor(0xFFE1EAF7.toInt())
+            },
             Ui.lp().apply {
                 topMargin = Ui.dp(this@WelcomeActivity, 4)
             }
