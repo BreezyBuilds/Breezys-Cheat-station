@@ -726,39 +726,96 @@ class SettingsActivity : AppCompatActivity() {
         line("Selected sources are stored on this device. Installed cheat files are not changed by repository settings.", true)
     }
 
-    /** Read-only audit view. Displays the actual configured catalogue, not guessed providers. */
+    /**
+     * Browsable source catalogue. Avoids a single long dialog of repository URLs;
+     * users can inspect each source's format, branch, and enabled state.
+     */
     private fun showCheatRepositoryCatalogue() {
-        val entries: List<Triple<String, String, String>> = when (cheatSystem) {
+        data class Entry(
+            val name: String,
+            val description: String,
+            val owner: String,
+            val repo: String,
+            val branch: String,
+            val folder: String,
+            val format: String,
+            val enabled: Boolean
+        )
+        val entries: List<Entry> = when (cheatSystem) {
             "3DS" -> {
                 val enabled = app.settings.sources().map { it.id }.toSet()
-                app.settings.allSources().map { sourceConfig ->
-                    val source = RecommendedCheatSources.all.firstOrNull { it.config.id == sourceConfig.id }
-                    Triple(source?.name ?: "Custom 3DS source", "${if (sourceConfig.owner == "FlagBrew") "Primary database" else if (source == null) "Custom GitHub source" else "Sharkive mirror / fork"} · ${source?.description ?: "Custom Title-ID text files"}",
-                        "${if (sourceConfig.id in enabled) "Enabled" else "Disabled"} · github.com/${sourceConfig.owner}/${sourceConfig.repo} · ${sourceConfig.basePath}")
+                app.settings.allSources().map { config ->
+                    val builtIn = RecommendedCheatSources.all.firstOrNull { it.config.id == config.id }
+                    Entry(
+                        builtIn?.name ?: "Custom 3DS source",
+                        builtIn?.description ?: "User-configured Title-ID cheat source",
+                        config.owner, config.repo, config.branch, config.basePath,
+                        "3DS Title-ID text files", config.id in enabled
+                    )
                 }
             }
             "PS2" -> {
-                val enabled = Ps2Settings(this).sources().map { it.id }.toSet()
-                Ps2Settings(this).allSources().map { source ->
-                    Triple(source.name, "${if (source.name.contains("Patch", ignoreCase = true) || source.name.contains("Enhancement", ignoreCase = true)) "Patches / enhancements" else "Gameplay cheats"} · ${source.description}",
-                        "${if (source.id in enabled) "Enabled" else "Disabled"} · github.com/${source.owner}/${source.repo} · ${source.path}")
+                val settings = Ps2Settings(this)
+                val enabled = settings.sources().map { it.id }.toSet()
+                settings.allSources().map { config ->
+                    Entry(
+                        config.name, config.description, config.owner, config.repo,
+                        config.branch, config.path, "PS2 SERIAL_CRC.pnach files",
+                        config.id in enabled
+                    )
                 }
             }
             else -> {
                 val enabled = app.dolphinSettings.sources().map { it.id }.toSet()
-                app.dolphinSettings.allSources().map { source ->
-                    Triple(source.name, source.description,
-                        "${if (source.id in enabled) "Enabled" else "Disabled"} · github.com/${source.owner}/${source.repo} · ${source.path}")
+                app.dolphinSettings.allSources().map { config ->
+                    Entry(
+                        config.name, config.description, config.owner, config.repo,
+                        config.branch, config.path, "Dolphin GameSettings INI files",
+                        config.id in enabled
+                    )
                 }
             }
         }
-        val message = entries.joinToString("\n\n") { (name, description, location) ->
-            "$name\n$description\n$location"
+        if (entries.isEmpty()) {
+            note(Ui.Kind.ERROR, "No repositories are configured for $cheatSystem.")
+            return
         }
+        val names = entries.map {
+            "${if (it.enabled) "● Enabled" else "○ Disabled"} · ${it.name}"
+        }.toTypedArray()
         MaterialAlertDialogBuilder(this)
             .setTitle("$cheatSystem · Repository catalogue")
-            .setMessage(message.ifBlank { "No compatible repositories configured." })
+            .setItems(names) { _, index ->
+                val source = entries[index]
+                val details = buildString {
+                    append(source.description)
+                    append("\\n\\nStatus: ")
+                    append(if (source.enabled) "Enabled" else "Disabled")
+                    append("\\nFormat: ")
+                    append(source.format)
+                    append("\\nGitHub: ")
+                    append(source.owner)
+                    append("/")
+                    append(source.repo)
+                    append("\\nBranch: ")
+                    append(source.branch)
+                    append("\\nFolder: ")
+                    append(source.folder.ifBlank { "(repository root)" })
+                    append("\\n\\nRepository availability and compatible cheat coverage must be checked separately.")
+                }
+                MaterialAlertDialogBuilder(this)
+                    .setTitle(source.name)
+                    .setMessage(details)
+                    .setPositiveButton("Done", null)
+                    .setNeutralButton("Back to catalogue") { _, _ ->
+                        showCheatRepositoryCatalogue()
+                    }
+                    .show()
+            }
             .setPositiveButton("Close", null)
+            .setNeutralButton("Manage selection") { _, _ ->
+                chooseUniversalRepositories()
+            }
             .show()
     }
 
