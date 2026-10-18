@@ -13,6 +13,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.LinearLayout
+import android.widget.FrameLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
@@ -51,9 +52,9 @@ class RetroHubV2Activity : AppCompatActivity() {
     private fun column() = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
     private fun addGap(parent: LinearLayout, size: Int) { parent.addView(View(this), LinearLayout.LayoutParams(1, dp(size))) }
     private fun page(title: String, subtitle: String, p: Palette): LinearLayout {
-        val root = column().apply { setPadding(dp(20),dp(24),dp(20),dp(24)) }
-        root.addView(label(title, 26f, p.heading, true)); addGap(root,6)
-        root.addView(label(subtitle,14f,p.secondary)); addGap(root,24)
+        val root = column().apply { setPadding(dp(20),dp(18),dp(20),dp(24)) }
+        root.addView(label(title, 26f, p.heading, true)); addGap(root,4)
+        root.addView(label(subtitle,14f,p.secondary)); addGap(root,18)
         return root
     }
     private fun show(root: LinearLayout, p: Palette) {
@@ -72,41 +73,62 @@ class RetroHubV2Activity : AppCompatActivity() {
         background=bg(if(primary)p.primary else p.surface,p.border)
         minHeight=dp(48); setPadding(dp(12),dp(8),dp(12),dp(8)); setOnClickListener { click() }
     }
-    private fun station(title:String, desc:String, status:String, p:Palette, click:()->Unit):LinearLayout = column().apply {
+    private fun station(title:String, desc:String, icon:String, p:Palette, click:()->Unit):LinearLayout = column().apply {
         background=bg(p.surface,p.border)
-        setPadding(dp(16),dp(16),dp(16),dp(16))
-        addView(label(title,19f,p.heading,true));addGap(this,5)
-        addView(label(desc,13f,p.secondary));addGap(this,7)
-        addView(label(status,12f,p.secondary));addGap(this,12)
-        addView(action("Open station",p,true,click))
+        setPadding(dp(18),dp(18),dp(18),dp(18))
+        minimumHeight=dp(220)
+        addView(label(icon,25f,p.heading,true));addGap(this,14)
+        addView(label(title,20f,p.heading,true));addGap(this,6)
+        addView(label(desc,13f,p.secondary))
+        val spacer=View(this@RetroHubV2Activity)
+        addView(spacer,LinearLayout.LayoutParams(1,0,1f))
+        addGap(this,16)
+        addView(action("Open station  →",p,true,click),LinearLayout.LayoutParams(-1,dp(48)))
     }
     override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); home() }
     private fun home() {
-        val p=current(); val root=page("Breezy's Retro Hub","One hub. Every system.",p)
-        val settings=action("Appearance & themes",p,false){ appearance() }
-        root.addView(settings);addGap(root,20)
+        val p=current()
+        val root=column().apply { setPadding(dp(20),dp(18),dp(20),dp(24)) }
+        val header=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER_VERTICAL }
+        val heading=column().apply {
+            addView(label("Breezy's Retro Hub",26f,p.heading,true))
+            addGap(this,4)
+            addView(label("One hub. Every system.",14f,p.secondary))
+        }
+        header.addView(heading,LinearLayout.LayoutParams(0,-2,1f))
+        val settings=action("⚙",p,false){ appearance() }.apply {
+            contentDescription="Appearance and themes"
+            textSize=23f
+            minWidth=dp(48)
+        }
+        header.addView(settings,LinearLayout.LayoutParams(dp(52),dp(48)))
+        root.addView(header)
+        addGap(root,dpGap(28))
         val entries=listOf(
-            Triple("Emulators","Install and configure your systems","Foundation pending — no installer yet"),
-            Triple("Cheats","Manage cheats for verified integrations","Legacy cheat screens available"),
-            Triple("Tuning","Find recommended settings for your hardware","Recommendation engine coming later")
+            Triple("Emulators","Install and configure your systems","▣"),
+            Triple("Cheats","Find and manage compatible cheats","✦"),
+            Triple("Tuning","Find recommended settings for your device","⚙")
         )
-        val widthDp=resources.configuration.screenWidthDp
-        val landscapeWide=widthDp>=600
-        if(landscapeWide){
+        val wide=resources.configuration.screenWidthDp>=600
+        if(wide){
             val row=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL }
             entries.forEachIndexed { i,e ->
-                val card=station(e.first,e.second,e.third,p){ stationPage(i) }
-                val lp=LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f).apply { if(i>0) leftMargin=dp(12) }
+                val card=station(e.first,e.second,e.third,p){stationPage(i)}
+                val lp=LinearLayout.LayoutParams(0,dp(240),1f).apply { if(i>0) leftMargin=dp(12) }
                 row.addView(card,lp)
             }
             root.addView(row)
         } else {
             entries.forEachIndexed { i,e ->
-                root.addView(station(e.first,e.second,e.third,p){stationPage(i)},LinearLayout.LayoutParams(-1,-2));addGap(root,12)
+                root.addView(station(e.first,e.second,e.third,p){stationPage(i)},LinearLayout.LayoutParams(-1,dp(220)))
+                addGap(root,12)
             }
         }
+        addGap(root,20)
+        root.addView(label("V2 DEV BUILD  •  FOUNDATION",11f,p.secondary))
         show(root,p)
     }
+    private fun dpGap(value:Int)=value
     private fun stationPage(index:Int){
         val p=current();val names=listOf("Emulators","Cheats","Tuning")
         val root=page(names[index],"Breezy's Retro Hub V2",p)
