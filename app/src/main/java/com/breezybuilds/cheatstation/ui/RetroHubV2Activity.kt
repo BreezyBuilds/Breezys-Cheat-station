@@ -96,8 +96,8 @@ class RetroHubV2Activity : AppCompatActivity() {
             addView(label("One hub. Every system.",14f,p.secondary))
         }
         header.addView(heading,LinearLayout.LayoutParams(0,-2,1f))
-        val settings=action("⚙",p,false){ appearance() }.apply {
-            contentDescription="Appearance and themes"
+        val settings=action("⚙",p,false){ settings() }.apply {
+            contentDescription="Settings"
             textSize=23f
             minWidth=dp(48)
         }
@@ -134,7 +134,7 @@ class RetroHubV2Activity : AppCompatActivity() {
         val root=page(names[index],"Breezy's Retro Hub V2",p)
         root.addView(action("← Main hub",p,false){home()});addGap(root,20)
         if(index==0){
-            startActivity(Intent(this, EmulatorStationActivity::class.java))
+            settings()
             return
         }
         if(index==1){
@@ -147,6 +147,18 @@ class RetroHubV2Activity : AppCompatActivity() {
             root.addView(label("Not implemented yet",18f,p.heading,true));addGap(root,8)
             root.addView(label(if(index==0)"Emulator discovery, official setup and core management will be added after the foundation is tested." else "Hardware detection and game-specific settings guidance will be added after the foundation is tested.",14f,p.secondary))
         }
+        show(root,p)
+    }
+    private fun settings(){
+        val p=current(); val root=page("Settings", "Emulators and app preferences", p)
+        root.addView(action("← Main hub",p,false){home()});addGap(root,16)
+        root.addView(action("Emulators · Detection and setup",p,false){
+            startActivity(Intent(this,EmulatorStationActivity::class.java))
+        });addGap(root,10)
+        root.addView(action("Appearance & Themes",p,false){appearance()});addGap(root,10)
+        root.addView(action("Cheat storage & advanced settings",p,false){
+            startActivity(Intent(this,SettingsActivity::class.java))
+        })
         show(root,p)
     }
     private fun appearance(){

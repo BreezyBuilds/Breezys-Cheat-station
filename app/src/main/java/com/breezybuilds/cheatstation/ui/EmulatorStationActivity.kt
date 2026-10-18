@@ -12,6 +12,7 @@ import android.view.Gravity
 import android.view.View
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
+import com.breezybuilds.cheatstation.emulator.InstalledEmulators
 
 /** Catalogue and per-console emulator preferences. No unverified installation claims. */
 class EmulatorStationActivity : AppCompatActivity() {
@@ -88,6 +89,22 @@ class EmulatorStationActivity : AppCompatActivity() {
         gravity=Gravity.CENTER; background=shape(); setPadding(dp(12),dp(12),dp(12),dp(12)); setOnClickListener{action()}
     }
     override fun onCreate(savedInstanceState:Bundle?) { super.onCreate(savedInstanceState); colors(); build() }
+    override fun onResume() {
+        super.onResume()
+        // Recheck after installation/uninstallation or returning from Android settings.
+        consoles.forEach { c ->
+            val options = (listOf(c.recommended) + c.alternatives).distinct()
+            val key = "emulator_${c.id}"
+            val saved = preferences.getString(key, null)
+            val choice = InstalledEmulators.automaticChoice(options, saved,
+                preferences.getString("package_${c.id}", null)) { InstalledEmulators.installed(this, it) }
+            if (choice != null) {
+                preferences.edit().putString(key, choice.first).putString("package_${c.id}", choice.second).apply()
+            }
+        }
+        render()
+    }
+    private fun state(c: Console) = InstalledEmulators.status(this, preferred(c), preferences.getString("package_${c.id}", null))
     private fun preferred(c:Console) = preferences.getString("emulator_${c.id}",c.recommended) ?: c.recommended
     private fun build() {
         colors()
@@ -95,11 +112,11 @@ class EmulatorStationActivity : AppCompatActivity() {
         val availableDp=resources.configuration.screenWidthDp
         columns=when { availableDp>=800 -> 4; availableDp>=540 -> 3; availableDp>=340 -> 2; else -> 1 }
         val bar=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER_VERTICAL }
-        val titles=vertical().apply { addView(text("Emulator Station",24f,true));addView(text("30 systems · Choose your own setup",13f)) }
+        val titles=vertical().apply { addView(text("Emulator Station",24f,true));addView(text("30 systems · Emulator settings",13f)) }
         bar.addView(titles,LinearLayout.LayoutParams(0,-2,1f))
-        bar.addView(button("← Hub"){finish()})
+        bar.addView(button("← Settings"){finish()})
         root.addView(bar);gap(root,12)
-        root.addView(text("Select consoles and choose an emulator for each.",13f));gap(root,12)
+        root.addView(text("Installed emulators are detected automatically. Tap a system to choose.",13f));gap(root,12)
         val search=EditText(this).apply {
             setSingleLine(true); hint="Search console or emulator"; setTextColor(inkColor);setHintTextColor(muted)
             background=shape();setPadding(dp(12),dp(8),dp(12),dp(8));setText(query)
@@ -139,7 +156,7 @@ class EmulatorStationActivity : AppCompatActivity() {
                     val gridRow=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; gravity=Gravity.TOP }
                     batch.forEachIndexed { i,entry ->
                         val cell=consoleCard(entry)
-                        gridRow.addView(cell,LinearLayout.LayoutParams(0,dp(90),1f).apply {
+                        gridRow.addView(cell,LinearLayout.LayoutParams(0,dp(116),1f).apply {
                             if(i>0)leftMargin=dp(8)
                         })
                     }
@@ -151,26 +168,41 @@ class EmulatorStationActivity : AppCompatActivity() {
             gap(content,7)
         }
         if(visible==0 && (query.isNotBlank() || onlySelected))content.addView(text("No matching systems. Try a different search or select more consoles.",14f))
-        content.addView(text("Emulator preferences are stored locally. Setup and cheat compatibility must be verified separately.",12f))
+        content.addView(text("Choices are saved per system. Core, firmware and cheat storage setup remain separate.",12f))
     }
     private fun showEmulatorOptions(entry:Console) {
-        val options=(listOf(entry.recommended)+entry.alternatives).distinct()
-        val current=preferred(entry)
-        val checked=options.indexOf(current)
-        val message=buildString {
-            append("Choose the preferred emulator for ${entry.name}.\n\n")
-            if(entry.note.isNotBlank()) append(entry.note+"\n\n")
-            append("Recommendations are informational; automatic setup is not implemented.")
+        val choices = (listOf(entry.recommended) + entry.alternatives).distinct().flatMap { option ->
+            val packages = InstalledEmulators.packages(option)
+            if (packages.isEmpty()) listOf(option to null) else packages.map { option to it }
+        }
+        val savedPackage = preferences.getString("package_${entry.id}", null)
+        val checked = choices.indexOfFirst { it.first == preferred(entry) && (savedPackage == null || it.second == savedPackage) }
+        val labels = choices.map { (option, pkg) ->
+            "$option · ${InstalledEmulators.status(this, option, pkg)}" + (pkg?.let { "\n$it" } ?: "")
         }
         AlertDialog.Builder(this)
             .setTitle(entry.name)
-            .setMessage(message)
-            .setSingleChoiceItems(options.toTypedArray(),checked) { dialog,which ->
-                preferences.edit().putString("emulator_${entry.id}",options[which]).apply()
+            .setSingleChoiceItems(labels.toTypedArray(), checked) { dialog, which ->
+                val (option, pkg) = choices[which]
+                preferences.edit().putString("emulator_${entry.id}", option)
+                    .putString("package_${entry.id}", pkg).apply()
                 dialog.dismiss()
                 render()
             }
-            .setNegativeButton("Close",null)
+            .setNeutralButton("Setup help") { _, _ ->
+                AlertDialog.Builder(this).setTitle("${entry.name} setup")
+                    .setMessage(listOf(entry.note, "Install your chosen emulator, then open it to configure game folders and any required firmware. RetroArch cores must be installed inside RetroArch; their presence is not detected here. Package detection does not verify game or cheat compatibility.").filter { it.isNotBlank() }.joinToString("\n\n"))
+                    .setPositiveButton("Close", null)
+                    .setNeutralButton("Open emulator") { _, _ ->
+                        val option = preferred(entry)
+                        val pkg = preferences.getString("package_${entry.id}", null)
+                            ?: InstalledEmulators.installed(this, option).firstOrNull()
+                        val launch = pkg?.let { packageManager.getLaunchIntentForPackage(it) }
+                        if (launch == null || runCatching { startActivity(launch) }.isFailure)
+                            Toast.makeText(this, "Selected emulator is not installed or cannot be opened.", Toast.LENGTH_LONG).show()
+                    }.show()
+            }
+            .setNegativeButton("Close", null)
             .show()
     }
     private fun consoleCard(entry:Console):LinearLayout {
@@ -193,6 +225,7 @@ class EmulatorStationActivity : AppCompatActivity() {
         val labels=vertical().apply {
             addView(text(entry.name,14f,true).apply { maxLines=2; ellipsize=android.text.TextUtils.TruncateAt.END })
             addView(text(preferred(entry),11f).apply { maxLines=1; ellipsize=android.text.TextUtils.TruncateAt.END })
+            addView(text(state(entry),11f).apply { maxLines=2 })
         }
         line.addView(labels,LinearLayout.LayoutParams(0,-2,1f))
         val arrow=text("›",25f,true).apply {

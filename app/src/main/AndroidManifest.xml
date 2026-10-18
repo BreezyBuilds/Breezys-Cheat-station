@@ -4,6 +4,21 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <queries>
+        <package android:name="it.dbtecno.pizzaboy" />
+        <package android:name="it.dbtecno.pizzaboygba" />
+        <package android:name="org.devmiyax.yabasanshioro2" />
+        <!-- Build 4: verified catalogue frontend packages; no broad app enumeration. -->
+        <package android:name="com.retroarch" />
+        <package android:name="com.retroarch.aarch64" />
+        <package android:name="com.retroarch.ra32" />
+        <package android:name="me.magnum.melonds" />
+        <package android:name="com.github.stenzek.duckstation" />
+        <package android:name="org.ppsspp.ppsspp" />
+        <package android:name="org.ppsspp.ppssppgold" />
+        <package android:name="org.mupen64plusae.v3.fzurita" />
+        <package android:name="com.explusalpha.Snes9xPlus" />
+        <package android:name="com.flycast.emulator" />
+
         <package android:name="xyz.aethersx2.android" />
         <package android:name="xyz.aethersx2.android.debug" />
         <package android:name="xyz.aethersx2.android.test" />

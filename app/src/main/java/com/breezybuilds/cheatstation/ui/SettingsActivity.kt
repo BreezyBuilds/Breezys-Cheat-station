@@ -420,6 +420,9 @@ class SettingsActivity : RetroThemedActivity() {
 
     private fun renderHome() {
         content.addView(Ui.tv(this, "Emulators, cheats and app preferences", 13f, secondary = true), Ui.lp())
+        card("Installed emulators", "Automatic detection and saved choices for each system") {
+            startActivity(android.content.Intent(this, EmulatorStationActivity::class.java))
+        }
         subsection("RETRO LOADER")
         card("Compatible Emulators", "Choose systems, detect installed emulators and open trusted download sources") {
             startActivity(android.content.Intent(this, RetroSetupActivity::class.java).putExtra("from_settings", true))
