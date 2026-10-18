@@ -26,6 +26,7 @@
         android:theme="@style/Theme.BreezyCheatStation"
         android:usesCleartextTraffic="false">
 
+        <activity android:name=".ui.EmulatorStationActivity" android:exported="false" />
         <activity android:name=".ui.RetroHubV2Activity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

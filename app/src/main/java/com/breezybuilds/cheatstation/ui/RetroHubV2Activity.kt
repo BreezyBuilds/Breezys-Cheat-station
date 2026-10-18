@@ -133,6 +133,10 @@ class RetroHubV2Activity : AppCompatActivity() {
         val p=current();val names=listOf("Emulators","Cheats","Tuning")
         val root=page(names[index],"Breezy's Retro Hub V2",p)
         root.addView(action("← Main hub",p,false){home()});addGap(root,20)
+        if(index==0){
+            startActivity(Intent(this, EmulatorStationActivity::class.java))
+            return
+        }
         if(index==1){
             root.addView(label("Existing cheat integrations",18f,p.heading,true));addGap(root,10)
             root.addView(label("This opens the legacy 3DS / PS2 / Wii / GameCube interface. Its capabilities are not yet migrated or reverified for V2.",14f,p.secondary));addGap(root,14)
