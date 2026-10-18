@@ -8,11 +8,11 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.breezybuilds.cheatstation"
+        applicationId = "com.breezybuilds.retrohub"
         minSdk = 29
         targetSdk = 35
-        versionCode = 6
-        versionName = "3.0.0-dev"
+        versionCode = 1
+        versionName = "0.1.0-dev"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // ARM64 is the primary target; the app is pure Kotlin so it runs on any ABI.
     }
